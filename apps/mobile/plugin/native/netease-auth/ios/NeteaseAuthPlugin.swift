@@ -127,19 +127,33 @@ public class NeteaseAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-private final class NeteaseLoginViewController: UIViewController, WKNavigationDelegate {
+private final class NeteaseLoginViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     var onAuthenticated: (() -> Void)?
     var onCancelled: (() -> Void)?
 
+    private static let phoneLoginURL = URL(string: "https://music.163.com/m/login")!
+    private static let wechatLoginURL = URL(
+        string: "https://music.163.com/api/sns/authorize" +
+            "?snsType=10&clientType=web2&callbackType=Login&forcelogin=true"
+    )!
+    private static let qqLoginURL = URL(
+        string: "https://music.163.com/api/sns/authorize" +
+            "?snsType=5&clientType=web2&callbackType=Login&forcelogin=true"
+    )!
+    private static let loginURLs = [phoneLoginURL, wechatLoginURL, qqLoginURL]
     private let webView = WKWebView(frame: .zero)
+    private let loginMethodControl = UISegmentedControl(items: ["手机号", "微信扫码", "QQ"])
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         view.backgroundColor = .systemBackground
         webView.navigationDelegate = self
+        webView.uiDelegate = self
+        loginMethodControl.selectedSegmentIndex = 0
+        loginMethodControl.addTarget(self, action: #selector(changeLoginMethod), for: .valueChanged)
         layoutChrome()
-        webView.load(URLRequest(url: URL(string: "https://music.163.com/")!))
+        webView.load(URLRequest(url: Self.phoneLoginURL))
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -152,14 +166,57 @@ private final class NeteaseLoginViewController: UIViewController, WKNavigationDe
         }
     }
 
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        if let scheme = url.scheme?.lowercased(), !Self.isWebScheme(scheme) {
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
+            return
+        }
+
+        if navigationAction.targetFrame == nil {
+            webView.load(URLRequest(url: url))
+            decisionHandler(.cancel)
+            return
+        }
+
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            webView.load(URLRequest(url: url))
+        }
+        return nil
+    }
+
+    private static func isWebScheme(_ scheme: String) -> Bool {
+        return scheme == "http" || scheme == "https" || scheme == "about"
+    }
+
     private func layoutChrome() {
         let closeButton = UIButton(type: .system)
         closeButton.setTitle("Close", for: .normal)
         closeButton.addTarget(self, action: #selector(cancelLogin), for: .touchUpInside)
 
         closeButton.translatesAutoresizingMaskIntoConstraints = false
+        loginMethodControl.translatesAutoresizingMaskIntoConstraints = false
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(closeButton)
+        view.addSubview(loginMethodControl)
         view.addSubview(webView)
 
         NSLayoutConstraint.activate([
@@ -167,11 +224,23 @@ private final class NeteaseLoginViewController: UIViewController, WKNavigationDe
             closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             closeButton.heightAnchor.constraint(equalToConstant: 48),
-            webView.topAnchor.constraint(equalTo: closeButton.bottomAnchor),
+            loginMethodControl.topAnchor.constraint(equalTo: closeButton.bottomAnchor),
+            loginMethodControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            loginMethodControl.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            loginMethodControl.heightAnchor.constraint(equalToConstant: 40),
+            webView.topAnchor.constraint(equalTo: loginMethodControl.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    @objc private func changeLoginMethod() {
+        let index = loginMethodControl.selectedSegmentIndex
+        guard Self.loginURLs.indices.contains(index) else {
+            return
+        }
+        webView.load(URLRequest(url: Self.loginURLs[index]))
     }
 
     @objc private func cancelLogin() {

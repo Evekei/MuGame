@@ -19,17 +19,25 @@ exercise on Windows.
 2. Open Android Studio with `pnpm android:open`.
 3. Launch the app on an emulator or physical device.
 4. Tap the top-left account entry and tap `登录`.
-5. Expected: a native WebView opens `https://music.163.com/`.
-6. Complete the official NetEase web login flow.
-7. Expected: the WebView closes after auth cookies appear.
-8. Expected: the account sheet shows `已登录`, nickname, and avatar if available.
-9. Force close and relaunch the app.
-10. Expected: backend session check restores `已登录`; if the NetEase session is
+5. Expected: a native WebView opens with a method switcher containing `手机号`,
+   `微信扫码`, and `QQ`.
+6. Expected: `手机号` loads NetEase's mobile phone login page.
+7. Tap `微信扫码`; expected: the WebView enters NetEase's official WeChat
+   website login flow and may show page title `微信登录` with QR-code login.
+8. Tap `QQ`; expected: the WebView enters NetEase's official QQ authorization
+   flow.
+9. If WeChat/QQ opens a system handoff screen or external app, complete the
+   official login and return to MuGame.
+10. Complete one official NetEase login flow.
+11. Expected: the WebView closes after auth cookies appear.
+12. Expected: the account sheet shows `已登录`, nickname, and avatar if available.
+13. Force close and relaunch the app.
+14. Expected: backend session check restores `已登录`; if the NetEase session is
     invalid, the account state becomes `登录已过期`.
-11. Tap `同步登录状态`.
-12. Expected: the profile remains current or moves to expired without crashing.
-13. Tap `退出登录`.
-14. Expected: native WebView cookies and backend session are both cleared.
+15. Tap `同步登录状态`.
+16. Expected: the profile remains current or moves to expired without crashing.
+17. Tap `退出登录`.
+18. Expected: native WebView cookies and backend session are both cleared.
 
 ## iOS
 
@@ -39,6 +47,8 @@ exercise on Windows.
 3. Set `NEXT_PUBLIC_API_BASE_URL` to an HTTPS API URL reachable from the device.
 4. Run `pnpm cap:sync`, then `pnpm ios:open`.
 5. Repeat the Android login, relaunch, sync, and logout checks.
+6. Expected: popup login links stay inside the controlled login WebView, while
+   external schemes such as WeChat are handed to iOS.
 
 ## Log Safety
 

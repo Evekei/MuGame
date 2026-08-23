@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./account": "./src/account.ts",
-    "./health": "./src/health.ts"
+    "./health": "./src/health.ts",
+    "./imports": "./src/imports.ts"
   }
 }

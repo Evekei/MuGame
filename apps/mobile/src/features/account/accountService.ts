@@ -1,4 +1,5 @@
 import type { NeteaseAccountSessionResponse } from "@mugame/contracts/account";
+import { Capacitor } from "@capacitor/core";
 import { ApiClientError } from "@/lib/api/client";
 import {
   getNeteaseAuthBridge,
@@ -39,9 +40,15 @@ export async function bootstrapAccountSession() {
 }
 
 export async function loginNetease() {
+  console.info(
+    "native platform detected",
+    Capacitor.isNativePlatform(),
+    Capacitor.getPlatform()
+  );
   setAccountState({ status: "logging_in" });
 
   try {
+    console.info("bridge login invoked");
     const loginResult = await dependencies.bridge.openLogin();
     if (!loginResult.authenticated) {
       throw new NeteaseAuthBridgeError("login_cancelled", "NetEase login ended.");
@@ -51,6 +58,7 @@ export async function loginNetease() {
     const session = await dependencies.api.saveSession(snapshot);
     applySessionResponse(session, "网易云登录已过期，请重新登录。");
   } catch (error) {
+    console.info("bridge login failed", safeErrorMessage(error));
     setAccountState(toErrorState(error, "网易云登录失败"));
   } finally {
     await closeLoginSafely();
@@ -165,4 +173,16 @@ async function closeLoginSafely() {
   } catch {
     // Closing the native login sheet is best-effort after a terminal state.
   }
+}
+
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { message?: unknown }).message);
+  }
+
+  return "unknown";
 }

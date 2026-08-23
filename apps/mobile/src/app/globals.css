@@ -170,6 +170,11 @@ p {
   padding: 16px;
 }
 
+.stage-panel > div {
+  min-width: 0;
+  width: 100%;
+}
+
 .stage-panel > span {
   align-items: center;
   background: var(--soft);
@@ -296,6 +301,241 @@ p {
   color: var(--foreground);
 }
 
+.import-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.share-input-label {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.import-preview textarea {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.5;
+  min-height: 132px;
+  padding: 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.import-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-list {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-card {
+  align-items: center;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.preview-card h3 {
+  font-size: 16px;
+  line-height: 1.25;
+  margin: 2px 0 4px;
+}
+
+.preview-card p {
+  font-size: 14px;
+}
+
+.preview-card-error {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.preview-cover {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--accent);
+  border-radius: 8px;
+  color: white;
+  display: inline-flex;
+  flex: 0 0 58px;
+  font-weight: 700;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.preview-cover img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.preview-card-body {
+  min-width: 0;
+}
+
+.preview-platform {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.preview-owner {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.import-confirmed {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.full-import-progress {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.full-import-header,
+.source-progress-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.full-import-header h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.full-import-header span,
+.source-progress-row strong {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.source-progress-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-progress-row {
+  background: var(--soft);
+  border-radius: 8px;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px;
+}
+
+.source-progress-row > div {
+  min-width: 0;
+}
+
+.source-progress-row p {
+  font-size: 13px;
+}
+
+.source-progress-title {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.match-review-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.match-job-progress {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.temp-playlist-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.match-progress-track {
+  background: var(--soft);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.match-progress-track span {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.match-progress-detail,
+.match-progress-current {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.match-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.match-review-row {
+  display: grid;
+  gap: 10px;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-button {
+  align-items: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--foreground);
+  display: grid;
+  gap: 4px;
+  min-height: 56px;
+  padding: 10px;
+  text-align: left;
+}
+
+.candidate-button span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.compact-action {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 @media (min-width: 680px) {
   .shell {
     padding: 24px;
@@ -303,6 +543,10 @@ p {
 
   .home-nav {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .import-actions {
+    grid-template-columns: 1fr 1fr;
   }
 
   .account-sheet {

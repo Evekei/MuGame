@@ -1,15 +1,8 @@
 package com.mugame.mobile.plugins;
 
-import android.annotation.SuppressLint;
-import android.app.Dialog;
-import android.graphics.Color;
-import android.view.ViewGroup;
+import android.content.Intent;
+import android.util.Log;
 import android.webkit.CookieManager;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.Button;
-import android.widget.LinearLayout;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -27,7 +20,7 @@ import org.json.JSONObject;
 
 @CapacitorPlugin(name = "NeteaseAuth")
 public class NeteaseAuthPlugin extends Plugin {
-    private static final String LOGIN_URL = "https://music.163.com/";
+    static final String TAG = "MuGameNeteaseAuth";
     private static final String[] COOKIE_URLS = {
         "https://music.163.com",
         "https://m.music.163.com",
@@ -42,26 +35,29 @@ public class NeteaseAuthPlugin extends Plugin {
         "NMTID"
     };
 
-    private Dialog loginDialog;
     private PluginCall pendingLoginCall;
 
     @PluginMethod
     public void openLogin(PluginCall call) {
-        getActivity().runOnUiThread(() -> showLoginDialog(call));
+        Log.i(TAG, "android plugin invoked: openLogin");
+        getActivity().runOnUiThread(() -> startLoginActivity(call));
     }
 
     @PluginMethod
     public void closeLogin(PluginCall call) {
+        Log.i(TAG, "android plugin invoked: closeLogin");
         getActivity().runOnUiThread(() -> {
-            closeLoginDialog(false);
+            NeteaseAuthActivity.closeIfOpen();
             call.resolve();
         });
     }
 
     @PluginMethod
     public void readSession(PluginCall call) {
+        Log.i(TAG, "android plugin invoked: readSession");
         JSONArray cookies = collectWhitelistedCookies();
         if (cookies.length() == 0) {
+            Log.w(TAG, "readSession failed: no whitelisted cookies");
             call.reject("NetEase session is not available.", "session_unavailable");
             return;
         }
@@ -69,110 +65,88 @@ public class NeteaseAuthPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("cookies", cookies);
         result.put("captured_at", utcNow());
+        Log.i(TAG, "readSession completed: cookie_count=" + cookies.length());
         call.resolve(result);
     }
 
     @PluginMethod
     public void clearSession(PluginCall call) {
+        Log.i(TAG, "android plugin invoked: clearSession");
         getActivity().runOnUiThread(() -> {
-            closeLoginDialog(false);
+            NeteaseAuthActivity.closeIfOpen();
             CookieManager cookieManager = CookieManager.getInstance();
             cookieManager.removeAllCookies(value -> {
                 CookieManager.getInstance().flush();
+                Log.i(TAG, "native webview session cleared");
                 call.resolve();
             });
         });
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private void showLoginDialog(PluginCall call) {
+    private void startLoginActivity(PluginCall call) {
         if (pendingLoginCall != null) {
+            Log.w(TAG, "login rejected: already open");
             call.reject("NetEase login is already open.", "login_already_open");
             return;
         }
 
         pendingLoginCall = call;
-        loginDialog = new Dialog(getActivity());
-
-        LinearLayout layout = new LinearLayout(getActivity());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setBackgroundColor(Color.WHITE);
-
-        Button closeButton = new Button(getActivity());
-        closeButton.setText("Close");
-        closeButton.setOnClickListener(view -> cancelPendingLogin());
-        layout.addView(
-            closeButton,
-            new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        );
-
-        WebView webView = new WebView(getActivity());
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        webView.setWebViewClient(new WebViewClient() {
+        NeteaseAuthActivity.setListener(new NeteaseAuthActivity.AuthListener() {
             @Override
-            public void onPageFinished(WebView view, String url) {
+            public void onCompleted() {
                 resolvePendingLoginIfAuthenticated();
             }
+
+            @Override
+            public void onCancelled() {
+                cancelPendingLogin("NetEase login cancelled.", "login_cancelled");
+            }
+
+            @Override
+            public void onFailed(String message) {
+                cancelPendingLogin(message, "login_failed");
+            }
         });
-
-        layout.addView(
-            webView,
-            new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1
-            )
+        Intent intent = new Intent(getActivity(), NeteaseAuthActivity.class);
+        intent.putExtra(
+            NeteaseAuthActivity.EXTRA_LOGIN_URL,
+            NeteaseLoginWebViewSupport.LOGIN_URL
         );
-
-        loginDialog.setContentView(layout);
-        loginDialog.setOnCancelListener(dialog -> cancelPendingLogin());
-        loginDialog.show();
-
-        webView.loadUrl(LOGIN_URL);
+        Log.i(TAG, "starting login activity");
+        getActivity().startActivity(intent);
     }
 
     private void resolvePendingLoginIfAuthenticated() {
         if (pendingLoginCall == null || !hasAuthCookie()) {
+            Log.w(TAG, "login completed callback without auth cookie");
             return;
         }
 
         PluginCall call = pendingLoginCall;
         pendingLoginCall = null;
+        NeteaseAuthActivity.clearListener();
         JSObject result = new JSObject();
         result.put("authenticated", true);
+        Log.i(TAG, "login state detected: authenticated");
         call.resolve(result);
-        closeLoginDialog(false);
     }
 
-    private void cancelPendingLogin() {
+    private void cancelPendingLogin(String message, String code) {
         if (pendingLoginCall != null) {
             PluginCall call = pendingLoginCall;
             pendingLoginCall = null;
-            call.reject("NetEase login cancelled.", "login_cancelled");
-        }
-        closeLoginDialog(false);
-    }
-
-    private void closeLoginDialog(boolean rejectPending) {
-        if (rejectPending && pendingLoginCall != null) {
-            pendingLoginCall.reject("NetEase login closed.", "login_cancelled");
-            pendingLoginCall = null;
-        }
-
-        if (loginDialog != null) {
-            loginDialog.dismiss();
-            loginDialog = null;
+            NeteaseAuthActivity.clearListener();
+            Log.w(TAG, "login cancelled / failed: " + code);
+            call.reject(message, code);
         }
     }
 
     private boolean hasAuthCookie() {
         Map<String, String> cookies = collectCookieMap();
-        return cookies.containsKey("MUSIC_U") || cookies.containsKey("MUSIC_A");
+        boolean authenticated =
+            cookies.containsKey("MUSIC_U") || cookies.containsKey("MUSIC_A");
+        Log.i(TAG, "login state checked: authenticated=" + authenticated);
+        return authenticated;
     }
 
     private JSONArray collectWhitelistedCookies() {

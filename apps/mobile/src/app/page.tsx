@@ -1,6 +1,7 @@
 import { AccountEntry } from "@/features/account/AccountEntry";
 import { HomeNavigation } from "@/features/navigation/HomeNavigation";
 import { HealthPanel } from "@/components/HealthPanel";
+import { PlaylistImportPreview } from "@/features/playlist-import/PlaylistImportPreview";
 
 export default function Home() {
   return (
@@ -27,7 +28,8 @@ export default function Home() {
             <span>01</span>
             <div>
               <h2>导入歌单</h2>
-              <p>后续会在这里粘贴网易云和 QQ 音乐分享链接。</p>
+              <p>粘贴分享文案，导入前先确认歌单来自谁。</p>
+              <PlaylistImportPreview />
             </div>
           </article>
           <article className="stage-panel" id="play">

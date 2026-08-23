@@ -35,6 +35,10 @@ export function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
   const isBusy = Boolean(pendingAction) || account.status === "logging_in";
 
   async function runAction(actionName: string, action: () => Promise<void>) {
+    if (actionName === "login") {
+      console.info("login button clicked");
+    }
+
     setPendingAction(actionName);
     try {
       await action();

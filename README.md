@@ -65,6 +65,10 @@ NetEase login uses the Capacitor native bridge. In a plain browser, tapping
 `登录` shows that Android/iOS is required; browser code must not read WebView
 cookies.
 
+On Android/iOS, the native bridge opens official NetEase login URLs behind a
+small native method switcher for 手机号 / 微信扫码 / QQ. Popup links and external login
+schemes stay confined to the native bridge layer.
+
 The API stores the minimum NetEase session needed for the personal MVP in
 SQLite. Configure the database path with:
 
