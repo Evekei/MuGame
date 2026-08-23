@@ -1,0 +1,21 @@
+{
+  "name": "mugame",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev:web": "pnpm --dir apps/mobile dev",
+    "dev:api": "pnpm --dir services/api dev",
+    "build:web": "pnpm --dir apps/mobile build",
+    "cap:sync": "pnpm --dir apps/mobile cap:sync",
+    "cap:add:android": "pnpm --dir apps/mobile cap:add:android",
+    "cap:add:ios": "pnpm --dir apps/mobile cap:add:ios",
+    "android:open": "pnpm --dir apps/mobile android:open",
+    "ios:open": "pnpm --dir apps/mobile ios:open",
+    "lint": "pnpm --dir apps/mobile lint && pnpm check:no-next-runtime",
+    "typecheck": "pnpm --dir apps/mobile typecheck",
+    "test:web": "pnpm --dir apps/mobile test",
+    "test:api": "pnpm --dir services/api test",
+    "check:no-next-runtime": "node scripts/check-no-next-runtime.mjs"
+  }
+}
