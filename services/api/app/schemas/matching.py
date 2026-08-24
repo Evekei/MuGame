@@ -21,6 +21,7 @@ class MatchedTrackItem(BaseModel):
     artists: list[str]
     album: str | None = None
     duration_ms: int | None = None
+    cover_url: str | None = None
     source_track_ids: list[str]
     contributors: list[Contributor]
     match_status: Literal[

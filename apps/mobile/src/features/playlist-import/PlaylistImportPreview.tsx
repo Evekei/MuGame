@@ -2,9 +2,10 @@
 
 import type {
   ImportSessionResponse,
+  MatchedTrackItem,
   PlaylistPreviewItem
 } from "@mugame/contracts/imports";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FullImportProgress } from "./FullImportProgress";
 import { MatchJobProgress } from "./MatchJobProgress";
 import { MatchReviewPanel } from "./MatchReviewPanel";
@@ -32,8 +33,13 @@ type FullImportState =
   | { status: "ready"; session: ImportSessionResponse; message?: undefined }
   | { status: "error"; session?: ImportSessionResponse; message: string };
 
-export function PlaylistImportPreview() {
+interface PlaylistImportPreviewProps {
+  onReadyToPlay?: (tracks: MatchedTrackItem[]) => void;
+}
+
+export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewProps) {
   const [rawText, setRawText] = useState("");
+  const readyPlaySessionRef = useRef<string | undefined>(undefined);
   const [preview, setPreview] = useState<PreviewState>({
     status: "idle",
     items: []
@@ -62,6 +68,18 @@ export function PlaylistImportPreview() {
 
     return () => window.clearTimeout(timeoutId);
   }, [fullImport]);
+
+  useEffect(() => {
+    if (!matching.result || !syncState.result || syncState.status !== "ready") {
+      return;
+    }
+    const key = `${matching.result.import_session_id}:${syncState.result.ready_at ?? "ready"}`;
+    if (readyPlaySessionRef.current === key) {
+      return;
+    }
+    readyPlaySessionRef.current = key;
+    onReadyToPlay?.(matching.result.tracks);
+  }, [matching.result, onReadyToPlay, syncState]);
 
   async function identifyPlaylists(nextText = rawText) {
     setPreview((current) => ({ status: "loading", items: current.items }));

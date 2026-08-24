@@ -28,7 +28,7 @@ def _split_csv(value: str) -> list[str]:
 def get_settings() -> Settings:
     cors_origins = os.getenv(
         "MUGAME_CORS_ORIGINS",
-        "http://localhost:3001,http://127.0.0.1:3001,http://localhost:3000,http://127.0.0.1:3000,https://localhost",
+        "http://localhost,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3000,http://127.0.0.1:3000,https://localhost,capacitor://localhost,ionic://localhost",
     )
     return Settings(
         app_name=os.getenv("MUGAME_API_NAME", "MuGame API"),

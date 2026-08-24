@@ -5,6 +5,7 @@ android {
     compileSdk = rootProject.ext.compileSdkVersion
     sourceSets {
         main.java.srcDirs += '../../plugin/native/netease-auth/android/src/main/java'
+        main.java.srcDirs += '../../plugin/native/netease-player/android/src/main/java'
     }
     defaultConfig {
         applicationId "com.mugame.mobile"

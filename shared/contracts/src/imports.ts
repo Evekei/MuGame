@@ -142,6 +142,7 @@ export interface MatchedTrackItem {
   artists: string[];
   album?: string;
   duration_ms?: number;
+  cover_url?: string;
   source_track_ids: string[];
   contributors: Contributor[];
   match_status: MatchStatus;
