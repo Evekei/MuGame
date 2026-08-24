@@ -5,10 +5,18 @@ import { useState } from "react";
 import { HealthPanel } from "@/components/HealthPanel";
 import { HomeNavigation } from "@/features/navigation/HomeNavigation";
 import { PlayerPage } from "@/features/player/PlayerPage";
-import { PlaylistImportPreview } from "@/features/playlist-import/PlaylistImportPreview";
+import {
+  PlaylistImportPreview,
+  type ReadyToPlayPayload
+} from "@/features/playlist-import/PlaylistImportPreview";
+
+interface PlayState {
+  tempPlaylistId?: string;
+  tracks: MatchedTrackItem[];
+}
 
 export function HomeExperience() {
-  const [playTracks, setPlayTracks] = useState<MatchedTrackItem[]>([]);
+  const [playState, setPlayState] = useState<PlayState>({ tracks: [] });
 
   return (
     <main className="content">
@@ -26,7 +34,7 @@ export function HomeExperience() {
           <div>
             <h2>导入歌单</h2>
             <p>粘贴分享文案，导入前先确认歌单来自谁。</p>
-            <PlaylistImportPreview onReadyToPlay={setPlayTracks} />
+            <PlaylistImportPreview onReadyToPlay={setReadyToPlay} />
           </div>
         </article>
         <article className="stage-panel" id="play">
@@ -34,8 +42,11 @@ export function HomeExperience() {
           <div>
             <h2>正在播放/开始游戏</h2>
             <p>临时歌单准备好后，从这里进入播放和猜来源。</p>
-            {playTracks.length > 0 ? (
-              <PlayerPage tracks={playTracks} />
+            {playState.tracks.length > 0 ? (
+              <PlayerPage
+                tempPlaylistId={playState.tempPlaylistId}
+                tracks={playState.tracks}
+              />
             ) : (
               <div className="player-empty" aria-label="播放页占位">
                 <p>同步临时歌单后，播放控制会出现在这里。</p>
@@ -55,4 +66,11 @@ export function HomeExperience() {
       <HealthPanel />
     </main>
   );
+
+  function setReadyToPlay(payload: ReadyToPlayPayload) {
+    setPlayState({
+      tempPlaylistId: payload.tempPlaylistId,
+      tracks: payload.tracks
+    });
+  }
 }

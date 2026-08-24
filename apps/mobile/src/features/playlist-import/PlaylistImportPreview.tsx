@@ -21,6 +21,11 @@ import { playlistImportErrorMessage } from "./playlistImportErrors";
 import { useImportMatching } from "./useImportMatching";
 import { useTempPlaylistSync } from "./useTempPlaylistSync";
 
+export interface ReadyToPlayPayload {
+  tempPlaylistId: string;
+  tracks: MatchedTrackItem[];
+}
+
 type PreviewState =
   | { status: "idle"; items: PlaylistPreviewItem[] }
   | { status: "loading"; items: PlaylistPreviewItem[] }
@@ -34,7 +39,7 @@ type FullImportState =
   | { status: "error"; session?: ImportSessionResponse; message: string };
 
 interface PlaylistImportPreviewProps {
-  onReadyToPlay?: (tracks: MatchedTrackItem[]) => void;
+  onReadyToPlay?: (payload: ReadyToPlayPayload) => void;
 }
 
 export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewProps) {
@@ -78,7 +83,10 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
       return;
     }
     readyPlaySessionRef.current = key;
-    onReadyToPlay?.(matching.result.tracks);
+    onReadyToPlay?.({
+      tempPlaylistId: syncState.result.temp_playlist_id,
+      tracks: matching.result.tracks
+    });
   }, [matching.result, onReadyToPlay, syncState]);
 
   async function identifyPlaylists(nextText = rawText) {

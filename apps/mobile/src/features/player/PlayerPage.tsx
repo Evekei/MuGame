@@ -24,12 +24,16 @@ export interface PlayerController {
   playNext: () => Promise<PlayerTrack | undefined>;
   playPrevious: () => Promise<PlayerTrack | undefined>;
   seek: (ms: number) => Promise<void>;
-  startSession: (tracks: readonly MatchedTrackItem[]) => PlayerSessionSummary;
+  startSession: (
+    tracks: readonly MatchedTrackItem[],
+    options?: { tempPlaylistId?: string }
+  ) => PlayerSessionSummary;
 }
 
 interface PlayerPageProps {
   lyricsApi?: LyricsApi;
   player?: PlayerController;
+  tempPlaylistId?: string;
   tracks: MatchedTrackItem[];
 }
 
@@ -42,6 +46,7 @@ const emptyPlayback: PlaybackState = {
 export function PlayerPage({
   lyricsApi = getTrackLyrics,
   player = neteasePlayerService,
+  tempPlaylistId,
   tracks
 }: PlayerPageProps) {
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack>();
@@ -50,10 +55,11 @@ export function PlayerPage({
   const [lyricsFailed, setLyricsFailed] = useState(false);
   const [playback, setPlayback] = useState<PlaybackState>(emptyPlayback);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
+  const playableTracks = useMemo(() => toPlayableTracks(tracks), [tracks]);
   const summary = useMemo(() => playableSummary(tracks), [tracks]);
 
   useEffect(() => {
-    player.startSession(tracks);
+    player.startSession(tracks, { tempPlaylistId });
     void player.initialize().catch(() => {
       setPlayback({
         ...emptyPlayback,
@@ -64,7 +70,7 @@ export function PlayerPage({
     return () => {
       void player.destroy();
     };
-  }, [player, tracks]);
+  }, [player, tempPlaylistId, tracks]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -79,26 +85,46 @@ export function PlayerPage({
 
   async function startOrToggle() {
     if (!currentTrack) {
-      await playAndSelect(() => player.playNext());
-      return;
+      await selectTrack(playableTracks[0]);
     }
-    if (playback.state === "playing") {
-      await player.pause();
-    } else {
-      await player.play();
+
+    try {
+      if (playback.state === "playing") {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+      await refreshAndSelectPlayback();
+    } catch (error) {
+      setPlayback({
+        ...emptyPlayback,
+        state: "error",
+        lastError: error instanceof Error ? error.message : "播放器控制失败"
+      });
     }
-    await refreshPlayback();
   }
 
   async function playAndSelect(action: () => Promise<PlayerTrack | undefined>) {
-    const nextTrack = await action();
+    try {
+      const nextTrack = await action();
+      await selectTrack(nextTrack);
+      await refreshAndSelectPlayback();
+    } catch (error) {
+      setPlayback({
+        ...emptyPlayback,
+        state: "error",
+        lastError: error instanceof Error ? error.message : "播放器控制失败"
+      });
+    }
+  }
+
+  async function selectTrack(nextTrack: PlayerTrack | undefined) {
     if (!nextTrack) {
       return;
     }
     setCurrentTrack(nextTrack);
     setCoverFailed(false);
     await loadLyrics(nextTrack.netease_song_id);
-    await refreshPlayback();
   }
 
   async function loadLyrics(trackId: string) {
@@ -120,6 +146,17 @@ export function PlayerPage({
         state: "error",
         lastError: error instanceof Error ? error.message : "播放器状态读取失败"
       });
+    }
+  }
+
+  async function refreshAndSelectPlayback() {
+    const nextPlayback = await player.getPlaybackState();
+    setPlayback(nextPlayback);
+    const track = playableTracks.find(
+      (item) => item.netease_song_id === nextPlayback.currentTrackId
+    );
+    if (track) {
+      await selectTrack(track);
     }
   }
 
@@ -152,7 +189,7 @@ export function PlayerPage({
 
       <div className="player-meta">
         <h3>{currentTrack?.display_title ?? "临时歌单已准备"}</h3>
-        <p>{currentTrack?.artists.join(" / ") ?? "点击播放开始随机队列"}</p>
+        <p>{currentTrack?.artists.join(" / ") ?? "点击播放打开网易云临时歌单"}</p>
         {summary ? (
           <small>
             可播放 {summary.playableCount} 首

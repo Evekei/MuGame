@@ -12,9 +12,12 @@ describe("NeteasePlayerBridge web contract", () => {
     expect(typeof bridge.ensureLoggedIn).toBe("function");
     expect(typeof bridge.getPlaybackState).toBe("function");
     expect(typeof bridge.initialize).toBe("function");
+    expect(typeof bridge.loadPlaylist).toBe("function");
     expect(typeof bridge.loadTrack).toBe("function");
+    expect(typeof bridge.next).toBe("function");
     expect(typeof bridge.pause).toBe("function");
     expect(typeof bridge.play).toBe("function");
+    expect(typeof bridge.previous).toBe("function");
     expect(typeof bridge.seek).toBe("function");
   });
 

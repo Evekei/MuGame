@@ -8,16 +8,21 @@ export type NeteasePlayerBridgeErrorCode =
   | "player_not_initialized"
   | "player_action_unsupported"
   | "player_load_failed"
-  | "netease_session_expired";
+  | "netease_session_expired"
+  | "netease_app_open_failed"
+  | "media_session_unavailable";
 
 export interface NeteasePlayerBridge {
   destroy: () => Promise<void>;
   ensureLoggedIn: () => Promise<void>;
   getPlaybackState: () => Promise<PlaybackState>;
   initialize: () => Promise<void>;
+  loadPlaylist: (options: { netease_playlist_id: string }) => Promise<void>;
   loadTrack: (options: { netease_song_id: string }) => Promise<void>;
+  next: () => Promise<void>;
   pause: () => Promise<void>;
   play: () => Promise<void>;
+  previous: () => Promise<void>;
   seek: (options: { ms: number }) => Promise<void>;
 }
 
@@ -57,11 +62,23 @@ class NeteasePlayerWebFallback extends WebPlugin implements NeteasePlayerBridge 
     throw nativeUnavailable();
   }
 
+  async loadPlaylist() {
+    throw nativeUnavailable();
+  }
+
+  async next() {
+    throw nativeUnavailable();
+  }
+
   async pause() {
     throw nativeUnavailable();
   }
 
   async play() {
+    throw nativeUnavailable();
+  }
+
+  async previous() {
     throw nativeUnavailable();
   }
 

@@ -4,11 +4,9 @@ import {
   getNeteasePlayerBridge,
   type NeteasePlayerBridge
 } from "@/bridges/NeteasePlayerBridge";
-import { ShuffleQueue, type RandomSource } from "./ShuffleQueue";
 
 interface NeteasePlayerServiceDependencies {
   bridge: NeteasePlayerBridge;
-  random: RandomSource;
 }
 
 export interface PlayerSessionSummary {
@@ -16,23 +14,37 @@ export interface PlayerSessionSummary {
   skippedCount: number;
 }
 
+interface StartSessionOptions {
+  tempPlaylistId?: string;
+}
+
 const defaultDependencies: NeteasePlayerServiceDependencies = {
-  bridge: getNeteasePlayerBridge(),
-  random: Math.random
+  bridge: getNeteasePlayerBridge()
 };
 
 export class NeteasePlayerService {
-  private queue?: ShuffleQueue<PlayerTrack>;
+  private playableTracks: PlayerTrack[] = [];
+  private tempPlaylistId?: string;
 
   constructor(private dependencies = defaultDependencies) {}
 
   async initialize() {
     await this.dependencies.bridge.initialize();
+    if (this.tempPlaylistId) {
+      await this.dependencies.bridge.ensureLoggedIn();
+      await this.dependencies.bridge.loadPlaylist({
+        netease_playlist_id: this.tempPlaylistId
+      });
+    }
   }
 
-  startSession(tracks: readonly MatchedTrackItem[]): PlayerSessionSummary {
+  startSession(
+    tracks: readonly MatchedTrackItem[],
+    options: StartSessionOptions = {}
+  ): PlayerSessionSummary {
     const playableTracks = toPlayableTracks(tracks);
-    this.queue = new ShuffleQueue(playableTracks, this.dependencies.random);
+    this.playableTracks = playableTracks;
+    this.tempPlaylistId = options.tempPlaylistId;
     return {
       playableCount: playableTracks.length,
       skippedCount: tracks.length - playableTracks.length
@@ -40,23 +52,13 @@ export class NeteasePlayerService {
   }
 
   async playNext() {
-    const track = this.queue?.next();
-    if (!track) {
-      return undefined;
-    }
-
-    await this.playTrack(track);
-    return track;
+    await this.dependencies.bridge.next();
+    return this.currentTrackFromPlayback();
   }
 
   async playPrevious() {
-    const track = this.queue?.previous();
-    if (!track) {
-      return undefined;
-    }
-
-    await this.playTrack(track);
-    return track;
+    await this.dependencies.bridge.previous();
+    return this.currentTrackFromPlayback();
   }
 
   async play() {
@@ -77,15 +79,15 @@ export class NeteasePlayerService {
 
   async destroy() {
     await this.dependencies.bridge.destroy();
-    this.queue = undefined;
+    this.playableTracks = [];
+    this.tempPlaylistId = undefined;
   }
 
-  private async playTrack(track: PlayerTrack) {
-    await this.dependencies.bridge.ensureLoggedIn();
-    await this.dependencies.bridge.loadTrack({
-      netease_song_id: track.netease_song_id
-    });
-    await this.dependencies.bridge.play();
+  private async currentTrackFromPlayback() {
+    const state = await this.dependencies.bridge.getPlaybackState();
+    return this.playableTracks.find(
+      (track) => track.netease_song_id === state.currentTrackId
+    );
   }
 }
 

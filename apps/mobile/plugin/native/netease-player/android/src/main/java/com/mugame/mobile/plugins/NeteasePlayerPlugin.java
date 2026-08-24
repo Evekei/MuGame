@@ -1,52 +1,39 @@
 package com.mugame.mobile.plugins;
 
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.media.AudioManager;
+import android.net.Uri;
 import android.util.Log;
-import android.view.ViewGroup;
-import android.webkit.CookieManager;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
+import android.view.KeyEvent;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 @CapacitorPlugin(name = "NeteasePlayer")
 public class NeteasePlayerPlugin extends Plugin {
     private static final String TAG = "MuGameNeteasePlayer";
-    private static final String PLAYER_URL_PREFIX = "https://music.163.com/m/song?id=";
-    private static final String AUDIO_SELECTOR = "audio";
-    private static final String SELECTOR_VERSION = "netease-mobile-song-audio-v1";
+    private static final String NETEASE_PACKAGE = "com.netease.cloudmusic";
+    private static final String PLAYLIST_URL_PREFIX = "https://music.163.com/playlist?id=";
+    private static final String SONG_URL_PREFIX = "https://music.163.com/song?id=";
 
-    private WebView webView;
     private String currentTrackId;
+    private String preparedUrl;
+    private boolean externalOpened;
     private String lastError;
-    private PluginCall pendingLoadCall;
 
     @PluginMethod
     public void initialize(PluginCall call) {
-        Log.i(TAG, "android player bridge invoked: initialize");
-        getActivity().runOnUiThread(() -> {
-            ensureWebView();
-            call.resolve();
-        });
+        Log.i(TAG, "android external player bridge initialized");
+        call.resolve();
     }
 
     @PluginMethod
     public void ensureLoggedIn(PluginCall call) {
-        boolean loggedIn = hasAuthCookie();
-        Log.i(TAG, "player login state checked: loggedIn=" + loggedIn);
-        if (!loggedIn) {
-            call.reject("NetEase session is expired.", "netease_session_expired");
-            return;
-        }
+        Log.i(TAG, "external NetEase app owns playback login state");
         call.resolve();
     }
 
@@ -57,208 +44,147 @@ public class NeteasePlayerPlugin extends Plugin {
             call.reject("netease_song_id is required.", "invalid_track_id");
             return;
         }
-        getActivity().runOnUiThread(() -> {
-            ensureWebView();
-            currentTrackId = songId;
-            lastError = null;
-            String url = PLAYER_URL_PREFIX + songId;
-            Log.i(TAG, "webview loading player URL: " + url);
-            pendingLoadCall = call;
-            webView.loadUrl(url);
-        });
+        currentTrackId = songId.trim();
+        prepareExternalUrl(SONG_URL_PREFIX + currentTrackId);
+        Log.i(TAG, "external NetEase song prepared id=" + currentTrackId);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void loadPlaylist(PluginCall call) {
+        String playlistId = call.getString("netease_playlist_id");
+        if (playlistId == null || playlistId.trim().isEmpty()) {
+            call.reject("netease_playlist_id is required.", "invalid_playlist_id");
+            return;
+        }
+        currentTrackId = null;
+        prepareExternalUrl(PLAYLIST_URL_PREFIX + playlistId.trim());
+        Log.i(TAG, "external NetEase playlist prepared id=" + playlistId.trim());
+        call.resolve();
     }
 
     @PluginMethod
     public void play(PluginCall call) {
-        runPlayerAction(call, actionScript("play"));
+        if (preparedUrl == null) {
+            call.reject("No NetEase playlist or song is prepared.", "player_not_initialized");
+            return;
+        }
+        openPreparedUrl(call);
     }
 
     @PluginMethod
     public void pause(PluginCall call) {
-        runPlayerAction(call, actionScript("pause"));
+        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_PAUSE);
+    }
+
+    @PluginMethod
+    public void next(PluginCall call) {
+        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_NEXT);
+    }
+
+    @PluginMethod
+    public void previous(PluginCall call) {
+        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_PREVIOUS);
     }
 
     @PluginMethod
     public void seek(PluginCall call) {
-        Integer ms = call.getInt("ms");
-        if (ms == null || ms < 0) {
-            call.reject("seek ms must be a non-negative integer.", "invalid_seek");
-            return;
-        }
-        runPlayerAction(call, seekScript(ms));
+        call.reject("Seek is not available when playback is handled by NetEase app.", "player_action_unsupported");
     }
 
     @PluginMethod
     public void getPlaybackState(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
-            if (webView == null) {
-                call.resolve(playbackState("idle", 0, 0));
-                return;
-            }
-            webView.evaluateJavascript(stateScript(), value -> call.resolve(parseState(value)));
-        });
+        if (externalOpened) {
+            call.resolve(playbackState("playing"));
+            return;
+        }
+        if (preparedUrl != null) {
+            call.resolve(playbackState("paused"));
+            return;
+        }
+        call.resolve(playbackState("idle"));
     }
 
     @PluginMethod
     public void destroy(PluginCall call) {
-        Log.i(TAG, "android player bridge invoked: destroy");
-        getActivity().runOnUiThread(() -> {
-            if (webView != null) {
-                ViewGroup parent = (ViewGroup) webView.getParent();
-                if (parent != null) {
-                    parent.removeView(webView);
-                }
-                webView.destroy();
-                webView = null;
-            }
-            currentTrackId = null;
-            lastError = null;
-            pendingLoadCall = null;
-            call.resolve();
-        });
+        currentTrackId = null;
+        preparedUrl = null;
+        externalOpened = false;
+        lastError = null;
+        call.resolve();
     }
 
-    private void ensureWebView() {
-        if (webView != null) {
-            return;
-        }
-        Log.i(TAG, "netease player webview created");
-        webView = new WebView(getContext());
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new PlayerWebViewClient());
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(1, 1);
-        params.leftMargin = -10;
-        params.topMargin = -10;
-        getActivity().addContentView(webView, params);
+    private void prepareExternalUrl(String url) {
+        preparedUrl = url;
+        externalOpened = false;
+        lastError = null;
     }
 
-    private void runPlayerAction(PluginCall call, String script) {
+    private void openPreparedUrl(PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            if (webView == null) {
-                rejectUnsupported(call, "player_not_initialized");
+            Intent appIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(preparedUrl));
+            appIntent.setPackage(NETEASE_PACKAGE);
+            appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (tryOpen(appIntent)) {
+                externalOpened = true;
+                lastError = null;
+                Log.i(TAG, "external NetEase app opened");
+                call.resolve();
                 return;
             }
-            webView.evaluateJavascript(script, value -> {
-                JSObject result = parseActionResult(value);
-                if (!result.getBool("ok")) {
-                    String error = result.getString("error", "player_action_failed");
-                    rejectUnsupported(call, error);
-                    return;
-                }
-                call.resolve();
-            });
+            openGenericUrl(call);
         });
     }
-    private void rejectUnsupported(PluginCall call, String reason) {
-        lastError = reason + " selector=" + AUDIO_SELECTOR + " version=" + SELECTOR_VERSION;
-        Log.w(TAG, "player action unsupported: " + lastError);
-        call.reject(lastError, "player_action_unsupported");
+
+    private void openGenericUrl(PluginCall call) {
+        Intent fallbackIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(preparedUrl));
+        fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (tryOpen(fallbackIntent)) {
+            externalOpened = true;
+            lastError = null;
+            Log.i(TAG, "external NetEase URL opened by generic intent");
+            call.resolve();
+            return;
+        }
+        lastError = "netease_app_open_failed";
+        Log.w(TAG, lastError);
+        call.reject("NetEase app could not be opened.", "netease_app_open_failed");
     }
-    private boolean hasAuthCookie() {
-        CookieManager manager = CookieManager.getInstance();
-        String cookies = manager.getCookie("https://music.163.com");
-        return cookies != null && (cookies.contains("MUSIC_U=") || cookies.contains("MUSIC_A="));
+
+    private boolean tryOpen(Intent intent) {
+        try {
+            getContext().startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException error) {
+            return false;
+        }
     }
-    private JSObject playbackState(String state, int currentMs, int durationMs) {
+
+    private void dispatchMediaKey(PluginCall call, int keyCode) {
+        AudioManager audioManager =
+            (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) {
+            call.reject("Android media session is unavailable.", "media_session_unavailable");
+            return;
+        }
+        long eventTime = System.currentTimeMillis();
+        audioManager.dispatchMediaKeyEvent(
+            new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0)
+        );
+        audioManager.dispatchMediaKeyEvent(
+            new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0)
+        );
+        Log.i(TAG, "media key dispatched code=" + keyCode);
+        call.resolve();
+    }
+
+    private JSObject playbackState(String state) {
         JSObject result = new JSObject();
         result.put("state", state);
-        result.put("currentTimeMs", currentMs);
-        result.put("durationMs", durationMs);
+        result.put("currentTimeMs", 0);
+        result.put("durationMs", 0);
         result.put("currentTrackId", currentTrackId);
         result.put("lastError", lastError);
         return result;
-    }
-    private JSObject parseState(String value) {
-        try {
-            JSONObject json = new JSONObject(unwrap(value));
-            JSObject result = playbackState(
-                json.optString("state", "error"),
-                json.optInt("currentTimeMs", 0),
-                json.optInt("durationMs", 0)
-            );
-            result.put("lastError", json.optString("lastError", lastError));
-            return result;
-        } catch (JSONException error) {
-            lastError = "state_parse_failed selector=" + AUDIO_SELECTOR;
-            return playbackState("error", 0, 0);
-        }
-    }
-    private JSObject parseActionResult(String value) {
-        JSObject result = new JSObject();
-        try {
-            JSONObject json = new JSONObject(unwrap(value));
-            result.put("ok", json.optBoolean("ok", false));
-            result.put("error", json.optString("error", ""));
-        } catch (JSONException error) {
-            result.put("ok", false);
-            result.put("error", "action_result_parse_failed");
-        }
-        return result;
-    }
-    private String unwrap(String value) {
-        if (value == null || value.equals("null")) {
-            return "{}";
-        }
-        if (value.startsWith("\"") && value.endsWith("\"")) {
-            return value.substring(1, value.length() - 1).replace("\\\"", "\"");
-        }
-        return value;
-    }
-    private String actionScript(String action) {
-        return "(function(){var a=document.querySelector('" + AUDIO_SELECTOR + "');"
-            + "if(!a){return JSON.stringify({ok:false,error:'audio_element_not_found'});}"
-            + "try{a." + action + "();return JSON.stringify({ok:true});}"
-            + "catch(e){return JSON.stringify({ok:false,error:String(e.message||e)});}})();";
-    }
-    private String seekScript(int ms) {
-        return "(function(){var a=document.querySelector('" + AUDIO_SELECTOR + "');"
-            + "if(!a){return JSON.stringify({ok:false,error:'audio_element_not_found'});}"
-            + "a.currentTime=" + (ms / 1000.0) + ";return JSON.stringify({ok:true});})();";
-    }
-    private String stateScript() {
-        return "(function(){var a=document.querySelector('" + AUDIO_SELECTOR + "');"
-            + "if(!a){return JSON.stringify({state:'error',currentTimeMs:0,durationMs:0,"
-            + "lastError:'audio_element_not_found selector=" + AUDIO_SELECTOR
-            + " version=" + SELECTOR_VERSION + "'});}"
-            + "var d=isFinite(a.duration)?Math.round(a.duration*1000):0;"
-            + "var c=isFinite(a.currentTime)?Math.round(a.currentTime*1000):0;"
-            + "var s=a.ended?'ended':(a.paused?'paused':'playing');"
-            + "return JSON.stringify({state:s,currentTimeMs:c,durationMs:d,lastError:null});})();";
-    }
-    private class PlayerWebViewClient extends WebViewClient {
-        @Override
-        public void onPageFinished(WebView view, String url) {
-            Log.i(TAG, "player page finished selectorVersion=" + SELECTOR_VERSION);
-            if (pendingLoadCall != null) {
-                PluginCall call = pendingLoadCall;
-                pendingLoadCall = null;
-                call.resolve();
-            }
-        }
-
-        @Override
-        public void onReceivedError(
-            WebView view,
-            WebResourceRequest request,
-            WebResourceError error
-        ) {
-            if (!request.isForMainFrame()) {
-                return;
-            }
-            lastError = "player_load_failed selectorVersion=" + SELECTOR_VERSION
-                + " code=" + error.getErrorCode();
-            Log.w(TAG, lastError);
-            if (pendingLoadCall != null) {
-                PluginCall call = pendingLoadCall;
-                pendingLoadCall = null;
-                call.reject(lastError, "player_load_failed");
-            }
-        }
     }
 }
