@@ -103,6 +103,7 @@ export function toPlayableTracks(
       netease_song_id: track.netease_song_id as string,
       display_title: track.display_title,
       artists: track.artists,
+      contributors: track.contributors,
       duration_ms: track.duration_ms,
       cover_url: track.cover_url
     }));

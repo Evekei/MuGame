@@ -579,6 +579,42 @@ p {
   font-weight: 700;
 }
 
+.source-reveal {
+  display: grid;
+  gap: 10px;
+}
+
+.source-reveal-button {
+  width: 100%;
+}
+
+.source-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-chip {
+  align-items: center;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 36px;
+  overflow-wrap: anywhere;
+  padding: 5px 10px;
+}
+
+.source-chip img {
+  border-radius: 999px;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
+}
+
 .lyric-panel {
   background: var(--soft);
   border-radius: 8px;

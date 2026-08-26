@@ -10,7 +10,8 @@ describe("NeteasePlayerService", () => {
         id: "1",
         netease_song_id: "song-1",
         display_title: "Track 1",
-        artists: ["Artist"]
+        artists: ["Artist"],
+        contributors: []
       }
     ]);
   });

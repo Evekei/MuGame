@@ -78,6 +78,31 @@ describe("PlayerPage", () => {
     expect(await screen.findByText("暂无歌词。")).toBeInTheDocument();
   });
 
+  it("reveals all contributor nicknames from the current track", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PlayerPage
+        lyricsApi={vi.fn().mockResolvedValue({ track_id: "song-1", original_lrc: "", parsed_lines: [] })}
+        player={createPlayer()}
+        tracks={[
+          matchedTrack([
+            { owner_nickname: "Alice", owner_source_id: "alice" },
+            { owner_nickname: "Bob", owner_source_id: "bob" }
+          ])
+        ]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "播放" }));
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
+
   it("finds the active lyric line from current time", () => {
     expect(
       getActiveLyricLineIndex(
@@ -101,6 +126,14 @@ function createPlayer(playback: PlaybackState = {
     netease_song_id: "song-1",
     display_title: "夜曲",
     artists: ["周杰伦"],
+    contributors: [
+      {
+        platform: "netease",
+        source_playlist_id: "playlist-1",
+        owner_source_id: "owner-1",
+        owner_nickname: "Alice"
+      }
+    ],
     duration_ms: 180000,
     cover_url: "https://example.test/cover.jpg"
   };
@@ -117,7 +150,9 @@ function createPlayer(playback: PlaybackState = {
   };
 }
 
-function matchedTrack(): MatchedTrackItem {
+function matchedTrack(
+  contributors: Array<{ owner_nickname: string; owner_source_id: string }> = []
+): MatchedTrackItem {
   return {
     id: "track-1",
     display_title: "夜曲",
@@ -125,7 +160,12 @@ function matchedTrack(): MatchedTrackItem {
     duration_ms: 180000,
     cover_url: "https://example.test/cover.jpg",
     source_track_ids: ["netease:song-1"],
-    contributors: [],
+    contributors: contributors.map((item) => ({
+      platform: "netease",
+      source_playlist_id: `playlist-${item.owner_source_id}`,
+      owner_source_id: item.owner_source_id,
+      owner_nickname: item.owner_nickname
+    })),
     match_status: "auto_accepted",
     netease_song_id: "song-1",
     match_confidence: 1,

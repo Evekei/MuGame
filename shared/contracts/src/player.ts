@@ -1,3 +1,5 @@
+import type { Contributor } from "./imports";
+
 export type PlaybackStatus =
   | "idle"
   | "loading"
@@ -19,6 +21,7 @@ export interface PlayerTrack {
   netease_song_id: string;
   display_title: string;
   artists: string[];
+  contributors: Contributor[];
   duration_ms?: number;
   cover_url?: string;
 }

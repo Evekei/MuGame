@@ -14,6 +14,7 @@ import {
   type PlayerSessionSummary
 } from "./NeteasePlayerService";
 import { getTrackLyrics, type LyricsApi } from "./playerApi";
+import { SourceReveal } from "./SourceReveal";
 
 export interface PlayerController {
   destroy: () => Promise<void>;
@@ -224,6 +225,11 @@ export function PlayerPage({
           下一首
         </button>
       </div>
+
+      <SourceReveal
+        contributors={currentTrack?.contributors ?? []}
+        trackId={currentTrack?.id}
+      />
 
       {playback.lastError ? <p className="account-error">{playback.lastError}</p> : null}
 
