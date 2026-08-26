@@ -40,6 +40,42 @@ describe("PlayerPage", () => {
     expect(screen.getByRole("button", { name: "打开网易云播放" })).toBeDisabled();
   });
 
+  it("opens floating window settings when overlay permission is missing", async () => {
+    const user = userEvent.setup();
+    const player = createPlayer();
+    player.isFloatingWindowEnabled = vi.fn().mockResolvedValue({ enabled: false });
+
+    render(<PlayerPage player={player} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />);
+
+    await user.click(await screen.findByRole("button", { name: "开启悬浮窗权限" }));
+
+    expect(player.openFloatingWindowSettings).toHaveBeenCalledOnce();
+  });
+
+  it("opens accessibility settings when playlist autoplay permission is missing", async () => {
+    const user = userEvent.setup();
+    const player = createPlayer();
+    player.isPlaylistAutoplayEnabled = vi.fn().mockResolvedValue({ enabled: false });
+
+    render(<PlayerPage player={player} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />);
+
+    await user.click(await screen.findByRole("button", { name: "开启无障碍权限" }));
+
+    expect(player.openPlaylistAutoplaySettings).toHaveBeenCalledOnce();
+  });
+
+  it("opens notification listener settings when playback monitor permission is missing", async () => {
+    const user = userEvent.setup();
+    const player = createPlayer();
+    player.isPlaybackMonitorEnabled = vi.fn().mockResolvedValue({ enabled: false });
+
+    render(<PlayerPage player={player} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />);
+
+    await user.click(await screen.findByRole("button", { name: "开启通知监听权限" }));
+
+    expect(player.openPlaybackMonitorSettings).toHaveBeenCalledOnce();
+  });
+
   it("shows a recoverable error when NetEase cannot be opened", async () => {
     const user = userEvent.setup();
     const player = createPlayer();
@@ -57,6 +93,12 @@ function createPlayer(): PlayerController {
   return {
     destroy: vi.fn().mockResolvedValue(undefined),
     initialize: vi.fn().mockResolvedValue(undefined),
+    isFloatingWindowEnabled: vi.fn().mockResolvedValue({ enabled: true }),
+    isPlaybackMonitorEnabled: vi.fn().mockResolvedValue({ enabled: true }),
+    isPlaylistAutoplayEnabled: vi.fn().mockResolvedValue({ enabled: true }),
+    openFloatingWindowSettings: vi.fn().mockResolvedValue(undefined),
+    openPlaybackMonitorSettings: vi.fn().mockResolvedValue(undefined),
+    openPlaylistAutoplaySettings: vi.fn().mockResolvedValue(undefined),
     play: vi.fn().mockResolvedValue(undefined),
     startSession: vi.fn().mockReturnValue({ playableCount: 1, skippedCount: 0 })
   };

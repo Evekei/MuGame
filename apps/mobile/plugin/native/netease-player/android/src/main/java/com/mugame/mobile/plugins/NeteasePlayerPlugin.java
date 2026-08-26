@@ -24,16 +24,21 @@ public class NeteasePlayerPlugin extends Plugin {
     private boolean preparedPlaylist;
     private boolean externalOpened;
     private String lastError;
+    private NeteaseFloatingSourceWindow floatingSourceWindow;
     private final NeteasePlaybackMonitorService.MetadataListener metadataListener =
         snapshot -> notifyListeners("neteasePlaybackMetadataChanged", snapshot.toJson());
 
     @Override
     public void load() {
+        floatingSourceWindow = new NeteaseFloatingSourceWindow(getContext());
         NeteasePlaybackMonitorService.addListener(metadataListener);
     }
 
     @Override
     protected void handleOnDestroy() {
+        if (floatingSourceWindow != null) {
+            floatingSourceWindow.hide();
+        }
         NeteasePlaybackMonitorService.removeListener(metadataListener);
         super.handleOnDestroy();
     }
@@ -49,6 +54,32 @@ public class NeteasePlayerPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("enabled", NeteasePlaybackMonitorService.isEnabled(getContext()));
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void configureSourceReveal(PluginCall call) {
+        if (floatingSourceWindow != null) {
+            floatingSourceWindow.updateTracks(call.getArray("tracks"));
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void isFloatingWindowEnabled(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("enabled", floatingSourceWindow != null && floatingSourceWindow.canShow());
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openFloatingWindowSettings(PluginCall call) {
+        Intent intent = new Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + getContext().getPackageName())
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
     }
 
     @PluginMethod
@@ -174,6 +205,9 @@ public class NeteasePlayerPlugin extends Plugin {
         preparedPlaylist = false;
         externalOpened = false;
         lastError = null;
+        if (floatingSourceWindow != null) {
+            floatingSourceWindow.hide();
+        }
         call.resolve();
     }
 
@@ -195,6 +229,9 @@ public class NeteasePlayerPlugin extends Plugin {
                 Log.i(TAG, "external NetEase app opened");
                 if (preparedPlaylist) {
                     NeteasePlaylistAutoplayService.requestPlaylistAutoplay();
+                    if (floatingSourceWindow != null) {
+                        floatingSourceWindow.show();
+                    }
                 }
                 call.resolve();
                 return;

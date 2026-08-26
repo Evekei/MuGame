@@ -9,12 +9,15 @@ describe("NeteasePlayerBridge web contract", () => {
     const bridge = getNeteasePlayerBridge();
 
     expect(typeof bridge.destroy).toBe("function");
+    expect(typeof bridge.configureSourceReveal).toBe("function");
     expect(typeof bridge.ensureLoggedIn).toBe("function");
     expect(typeof bridge.getCurrentPlaybackMetadata).toBe("function");
     expect(typeof bridge.initialize).toBe("function");
+    expect(typeof bridge.isFloatingWindowEnabled).toBe("function");
     expect(typeof bridge.isPlaylistAutoplayEnabled).toBe("function");
     expect(typeof bridge.isPlaybackMonitorEnabled).toBe("function");
     expect(typeof bridge.loadPlaylist).toBe("function");
+    expect(typeof bridge.openFloatingWindowSettings).toBe("function");
     expect(typeof bridge.openPlaylistAutoplaySettings).toBe("function");
     expect(typeof bridge.openPlaybackMonitorSettings).toBe("function");
     expect(typeof bridge.play).toBe("function");

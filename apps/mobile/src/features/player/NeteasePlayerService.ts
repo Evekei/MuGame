@@ -24,6 +24,7 @@ const defaultDependencies: NeteasePlayerServiceDependencies = {
 
 export class NeteasePlayerService {
   private tempPlaylistId?: string;
+  private playableTracks: PlayerTrack[] = [];
 
   constructor(private dependencies = defaultDependencies) {}
 
@@ -31,6 +32,9 @@ export class NeteasePlayerService {
     await this.dependencies.bridge.initialize();
     if (this.tempPlaylistId) {
       await this.dependencies.bridge.ensureLoggedIn();
+      await this.dependencies.bridge.configureSourceReveal({
+        tracks: this.playableTracks
+      });
       await this.dependencies.bridge.loadPlaylist({
         netease_playlist_id: this.tempPlaylistId
       });
@@ -42,6 +46,7 @@ export class NeteasePlayerService {
     options: StartSessionOptions = {}
   ): PlayerSessionSummary {
     const playableTracks = toPlayableTracks(tracks);
+    this.playableTracks = playableTracks;
     this.tempPlaylistId = options.tempPlaylistId;
     return {
       playableCount: playableTracks.length,
@@ -53,9 +58,34 @@ export class NeteasePlayerService {
     await this.dependencies.bridge.play();
   }
 
+  async isFloatingWindowEnabled() {
+    return this.dependencies.bridge.isFloatingWindowEnabled();
+  }
+
+  async isPlaylistAutoplayEnabled() {
+    return this.dependencies.bridge.isPlaylistAutoplayEnabled();
+  }
+
+  async isPlaybackMonitorEnabled() {
+    return this.dependencies.bridge.isPlaybackMonitorEnabled();
+  }
+
+  async openFloatingWindowSettings() {
+    await this.dependencies.bridge.openFloatingWindowSettings();
+  }
+
+  async openPlaylistAutoplaySettings() {
+    await this.dependencies.bridge.openPlaylistAutoplaySettings();
+  }
+
+  async openPlaybackMonitorSettings() {
+    await this.dependencies.bridge.openPlaybackMonitorSettings();
+  }
+
   async destroy() {
     await this.dependencies.bridge.destroy();
     this.tempPlaylistId = undefined;
+    this.playableTracks = [];
   }
 }
 

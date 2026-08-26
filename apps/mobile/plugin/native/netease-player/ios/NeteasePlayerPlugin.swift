@@ -8,6 +8,9 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "ensureLoggedIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "configureSourceReveal", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "isFloatingWindowEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openFloatingWindowSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isPlaybackMonitorEnabled", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openPlaybackMonitorSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isPlaylistAutoplayEnabled", returnType: CAPPluginReturnPromise),
@@ -39,6 +42,19 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func ensureLoggedIn(_ call: CAPPluginCall) {
         call.resolve()
+    }
+
+    @objc func configureSourceReveal(_ call: CAPPluginCall) {
+        call.resolve()
+    }
+
+    @objc func isFloatingWindowEnabled(_ call: CAPPluginCall) {
+        call.resolve(["enabled": false])
+    }
+
+    @objc func openFloatingWindowSettings(_ call: CAPPluginCall) {
+        call.reject("Floating source window is not available on iOS.",
+                    "player_action_unsupported")
     }
 
     @objc func isPlaybackMonitorEnabled(_ call: CAPPluginCall) {

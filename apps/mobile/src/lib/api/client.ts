@@ -8,7 +8,8 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     readonly status?: number,
-    readonly code?: string
+    readonly code?: string,
+    readonly url?: string
   ) {
     super(message);
     this.name = "ApiClientError";
@@ -32,6 +33,7 @@ async function requestJson<T>(path: string, options: RequestOptions = {}) {
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const url = `${getApiBaseUrl()}${path}`;
   const headers: HeadersInit = {
     Accept: "application/json"
   };
@@ -41,7 +43,7 @@ async function requestJson<T>(path: string, options: RequestOptions = {}) {
   }
 
   try {
-    const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    const response = await fetch(url, {
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       headers,
       method: options.method ?? "GET",
@@ -58,7 +60,8 @@ async function requestJson<T>(path: string, options: RequestOptions = {}) {
       throw new ApiClientError(
         errorBody?.error?.message ?? "API request failed.",
         response.status,
-        errorBody?.error?.code
+        errorBody?.error?.code,
+        url
       );
     }
 
@@ -69,10 +72,10 @@ async function requestJson<T>(path: string, options: RequestOptions = {}) {
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiClientError("API request timed out.", undefined, "timeout");
+      throw new ApiClientError("API request timed out.", undefined, "timeout", url);
     }
 
-    throw new ApiClientError("API request failed.", undefined, "network_error");
+    throw new ApiClientError("API request failed.", undefined, "network_error", url);
   } finally {
     window.clearTimeout(timeout);
   }

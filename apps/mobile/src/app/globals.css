@@ -518,6 +518,39 @@ p {
   width: 100%;
 }
 
+.permission-checklist {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.permission-checklist strong {
+  font-size: 14px;
+}
+
+.permission-checklist-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.permission-checklist-row span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .permission-checklist-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+}
+
 .source-reveal {
   display: grid;
   gap: 10px;

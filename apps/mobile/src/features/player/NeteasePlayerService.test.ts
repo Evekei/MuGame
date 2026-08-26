@@ -24,6 +24,12 @@ describe("NeteasePlayerService", () => {
     await service.initialize();
 
     expect(bridge.ensureLoggedIn).toHaveBeenCalledOnce();
+    expect(bridge.configureSourceReveal).toHaveBeenCalledWith({
+      tracks: [
+        expect.objectContaining({ netease_song_id: "song-1" }),
+        expect.objectContaining({ netease_song_id: "song-2" })
+      ]
+    });
     expect(bridge.loadPlaylist).toHaveBeenCalledWith({ netease_playlist_id: "temp-1" });
   });
 
@@ -39,11 +45,31 @@ describe("NeteasePlayerService", () => {
     expect(bridge.play).toHaveBeenCalledOnce();
     expect(bridge.destroy).toHaveBeenCalledOnce();
   });
+
+  it("delegates playback permission checks and settings", async () => {
+    const bridge = createBridge();
+    const service = new NeteasePlayerService({ bridge });
+
+    await service.isFloatingWindowEnabled();
+    await service.isPlaylistAutoplayEnabled();
+    await service.isPlaybackMonitorEnabled();
+    await service.openFloatingWindowSettings();
+    await service.openPlaylistAutoplaySettings();
+    await service.openPlaybackMonitorSettings();
+
+    expect(bridge.isFloatingWindowEnabled).toHaveBeenCalledOnce();
+    expect(bridge.isPlaylistAutoplayEnabled).toHaveBeenCalledOnce();
+    expect(bridge.isPlaybackMonitorEnabled).toHaveBeenCalledOnce();
+    expect(bridge.openFloatingWindowSettings).toHaveBeenCalledOnce();
+    expect(bridge.openPlaylistAutoplaySettings).toHaveBeenCalledOnce();
+    expect(bridge.openPlaybackMonitorSettings).toHaveBeenCalledOnce();
+  });
 });
 
 function createBridge(): NeteasePlayerBridge {
   return {
     addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+    configureSourceReveal: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn().mockResolvedValue(undefined),
     ensureLoggedIn: vi.fn().mockResolvedValue(undefined),
     getCurrentPlaybackMetadata: vi.fn().mockResolvedValue({
@@ -51,9 +77,11 @@ function createBridge(): NeteasePlayerBridge {
       updated_at_ms: 1
     }),
     initialize: vi.fn().mockResolvedValue(undefined),
+    isFloatingWindowEnabled: vi.fn().mockResolvedValue({ enabled: false }),
     isPlaylistAutoplayEnabled: vi.fn().mockResolvedValue({ enabled: false }),
     isPlaybackMonitorEnabled: vi.fn().mockResolvedValue({ enabled: false }),
     loadPlaylist: vi.fn().mockResolvedValue(undefined),
+    openFloatingWindowSettings: vi.fn().mockResolvedValue(undefined),
     openPlaylistAutoplaySettings: vi.fn().mockResolvedValue(undefined),
     openPlaybackMonitorSettings: vi.fn().mockResolvedValue(undefined),
     play: vi.fn().mockResolvedValue(undefined)

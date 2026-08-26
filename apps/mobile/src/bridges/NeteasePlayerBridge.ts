@@ -1,6 +1,6 @@
 "use client";
 
-import type { NeteasePlaybackMetadata } from "@mugame/contracts/player";
+import type { NeteasePlaybackMetadata, PlayerTrack } from "@mugame/contracts/player";
 import { registerPlugin, WebPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export type NeteasePlayerBridgeErrorCode =
@@ -21,9 +21,12 @@ export interface NeteasePlayerBridge {
   ensureLoggedIn: () => Promise<void>;
   getCurrentPlaybackMetadata: () => Promise<NeteasePlaybackMetadata>;
   initialize: () => Promise<void>;
+  configureSourceReveal: (options: { tracks: PlayerTrack[] }) => Promise<void>;
+  isFloatingWindowEnabled: () => Promise<{ enabled: boolean }>;
   isPlaylistAutoplayEnabled: () => Promise<{ enabled: boolean }>;
   isPlaybackMonitorEnabled: () => Promise<{ enabled: boolean }>;
   loadPlaylist: (options: { netease_playlist_id: string }) => Promise<void>;
+  openFloatingWindowSettings: () => Promise<void>;
   openPlaylistAutoplaySettings: () => Promise<void>;
   openPlaybackMonitorSettings: () => Promise<void>;
   play: () => Promise<void>;
@@ -59,6 +62,14 @@ class NeteasePlayerWebFallback extends WebPlugin implements NeteasePlayerBridge 
     throw nativeUnavailable();
   }
 
+  async configureSourceReveal() {
+    throw nativeUnavailable();
+  }
+
+  async isFloatingWindowEnabled() {
+    return { enabled: false };
+  }
+
   async isPlaylistAutoplayEnabled() {
     return { enabled: false };
   }
@@ -68,6 +79,10 @@ class NeteasePlayerWebFallback extends WebPlugin implements NeteasePlayerBridge 
   }
 
   async loadPlaylist() {
+    throw nativeUnavailable();
+  }
+
+  async openFloatingWindowSettings() {
     throw nativeUnavailable();
   }
 
