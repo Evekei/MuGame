@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
+from hashlib import sha256
 
 from app.core.errors import AppError
 from app.integrations.netease.temp_playlist import (
@@ -49,6 +50,7 @@ class TempPlaylistService:
             deduped.tracks,
             self.mapping_repository,
         )
+        target_ids = shuffled_playback_order(target_ids, import_session_id)
         adapter = self.adapter_factory(record)
 
         try:
@@ -126,6 +128,18 @@ def playable_netease_plan(
             ids.append(song_id)
             seen.add(song_id)
     return ids, skipped_count
+
+
+def shuffled_playback_order(track_ids: list[str], seed: str) -> list[str]:
+    keyed_ids = sorted(
+        enumerate(track_ids),
+        key=lambda item: sha256(f"{seed}:{item[0]}:{item[1]}".encode()).hexdigest(),
+    )
+    shuffled = [track_id for _, track_id in keyed_ids]
+    if len(shuffled) > 1 and shuffled == track_ids:
+        offset = int(sha256(seed.encode()).hexdigest(), 16) % (len(shuffled) - 1) + 1
+        return shuffled[offset:] + shuffled[:offset]
+    return shuffled
 
 
 def playable_id_for_track(

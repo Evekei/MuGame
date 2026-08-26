@@ -1,12 +1,10 @@
 package com.mugame.mobile.plugins;
 
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
-import android.media.AudioManager;
 import android.net.Uri;
+import android.provider.Settings;
 import android.util.Log;
-import android.view.KeyEvent;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -17,18 +15,68 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class NeteasePlayerPlugin extends Plugin {
     private static final String TAG = "MuGameNeteasePlayer";
     private static final String NETEASE_PACKAGE = "com.netease.cloudmusic";
-    private static final String PLAYLIST_URL_PREFIX = "https://music.163.com/playlist?id=";
-    private static final String SONG_URL_PREFIX = "https://music.163.com/song?id=";
+    private static final String PLAYLIST_URL_PREFIX = "orpheus://playlist/";
+    private static final String SONG_URL_PREFIX = "orpheus://song/";
+    private static final String AUTOPLAY_SUFFIX = "/?autoplay=1";
 
     private String currentTrackId;
     private String preparedUrl;
+    private boolean preparedPlaylist;
     private boolean externalOpened;
     private String lastError;
+    private final NeteasePlaybackMonitorService.MetadataListener metadataListener =
+        snapshot -> notifyListeners("neteasePlaybackMetadataChanged", snapshot.toJson());
+
+    @Override
+    public void load() {
+        NeteasePlaybackMonitorService.addListener(metadataListener);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        NeteasePlaybackMonitorService.removeListener(metadataListener);
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void initialize(PluginCall call) {
         Log.i(TAG, "android external player bridge initialized");
         call.resolve();
+    }
+
+    @PluginMethod
+    public void isPlaybackMonitorEnabled(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("enabled", NeteasePlaybackMonitorService.isEnabled(getContext()));
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openPlaybackMonitorSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void isPlaylistAutoplayEnabled(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("enabled", NeteasePlaylistAutoplayService.isEnabled(getContext()));
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openPlaylistAutoplaySettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getCurrentPlaybackMetadata(PluginCall call) {
+        call.resolve(NeteasePlaybackMonitorService.current(getContext()).toJson());
     }
 
     @PluginMethod
@@ -45,7 +93,8 @@ public class NeteasePlayerPlugin extends Plugin {
             return;
         }
         currentTrackId = songId.trim();
-        prepareExternalUrl(SONG_URL_PREFIX + currentTrackId);
+        preparedPlaylist = false;
+        prepareExternalUrl(SONG_URL_PREFIX + currentTrackId + AUTOPLAY_SUFFIX);
         Log.i(TAG, "external NetEase song prepared id=" + currentTrackId);
         call.resolve();
     }
@@ -58,7 +107,8 @@ public class NeteasePlayerPlugin extends Plugin {
             return;
         }
         currentTrackId = null;
-        prepareExternalUrl(PLAYLIST_URL_PREFIX + playlistId.trim());
+        preparedPlaylist = true;
+        prepareExternalUrl(PLAYLIST_URL_PREFIX + playlistId.trim() + AUTOPLAY_SUFFIX);
         Log.i(TAG, "external NetEase playlist prepared id=" + playlistId.trim());
         call.resolve();
     }
@@ -74,22 +124,34 @@ public class NeteasePlayerPlugin extends Plugin {
 
     @PluginMethod
     public void pause(PluginCall call) {
-        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_PAUSE);
+        call.reject(
+            "Transport controls are not available in external NetEase app mode.",
+            "player_action_unsupported"
+        );
     }
 
     @PluginMethod
     public void next(PluginCall call) {
-        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_NEXT);
+        call.reject(
+            "Transport controls are not available in external NetEase app mode.",
+            "player_action_unsupported"
+        );
     }
 
     @PluginMethod
     public void previous(PluginCall call) {
-        dispatchMediaKey(call, KeyEvent.KEYCODE_MEDIA_PREVIOUS);
+        call.reject(
+            "Transport controls are not available in external NetEase app mode.",
+            "player_action_unsupported"
+        );
     }
 
     @PluginMethod
     public void seek(PluginCall call) {
-        call.reject("Seek is not available when playback is handled by NetEase app.", "player_action_unsupported");
+        call.reject(
+            "Seek is not available when playback is handled by NetEase app.",
+            "player_action_unsupported"
+        );
     }
 
     @PluginMethod
@@ -109,6 +171,7 @@ public class NeteasePlayerPlugin extends Plugin {
     public void destroy(PluginCall call) {
         currentTrackId = null;
         preparedUrl = null;
+        preparedPlaylist = false;
         externalOpened = false;
         lastError = null;
         call.resolve();
@@ -124,31 +187,37 @@ public class NeteasePlayerPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             Intent appIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(preparedUrl));
             appIntent.setPackage(NETEASE_PACKAGE);
+            appIntent.addCategory(Intent.CATEGORY_BROWSABLE);
             appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if (tryOpen(appIntent)) {
                 externalOpened = true;
                 lastError = null;
                 Log.i(TAG, "external NetEase app opened");
+                if (preparedPlaylist) {
+                    NeteasePlaylistAutoplayService.requestPlaylistAutoplay();
+                }
                 call.resolve();
                 return;
             }
-            openGenericUrl(call);
-        });
-    }
 
-    private void openGenericUrl(PluginCall call) {
-        Intent fallbackIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(preparedUrl));
-        fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (tryOpen(fallbackIntent)) {
-            externalOpened = true;
-            lastError = null;
-            Log.i(TAG, "external NetEase URL opened by generic intent");
-            call.resolve();
-            return;
-        }
-        lastError = "netease_app_open_failed";
-        Log.w(TAG, lastError);
-        call.reject("NetEase app could not be opened.", "netease_app_open_failed");
+            Intent launchIntent = getContext().getPackageManager().getLaunchIntentForPackage(
+                NETEASE_PACKAGE
+            );
+            if (launchIntent != null && tryOpen(launchIntent)) {
+                externalOpened = true;
+                lastError = "netease_deep_link_failed";
+                Log.w(TAG, "NetEase app opened without playlist deep link");
+                call.reject(
+                    "NetEase app opened, but the playlist page could not be opened.",
+                    "netease_deep_link_failed"
+                );
+                return;
+            }
+
+            lastError = "netease_app_open_failed";
+            Log.w(TAG, lastError);
+            call.reject("NetEase app could not be opened.", "netease_app_open_failed");
+        });
     }
 
     private boolean tryOpen(Intent intent) {
@@ -158,24 +227,6 @@ public class NeteasePlayerPlugin extends Plugin {
         } catch (ActivityNotFoundException error) {
             return false;
         }
-    }
-
-    private void dispatchMediaKey(PluginCall call, int keyCode) {
-        AudioManager audioManager =
-            (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager == null) {
-            call.reject("Android media session is unavailable.", "media_session_unavailable");
-            return;
-        }
-        long eventTime = System.currentTimeMillis();
-        audioManager.dispatchMediaKeyEvent(
-            new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0)
-        );
-        audioManager.dispatchMediaKeyEvent(
-            new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0)
-        );
-        Log.i(TAG, "media key dispatched code=" + keyCode);
-        call.resolve();
     }
 
     private JSObject playbackState(String state) {

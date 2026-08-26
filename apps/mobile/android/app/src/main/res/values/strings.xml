@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">MuGame</string>
     <string name="title_activity_main">MuGame</string>
+    <string name="netease_playlist_autoplay_description">用于在打开网易云临时歌单后点击播放按钮</string>
     <string name="package_name">com.mugame.mobile</string>
     <string name="custom_url_scheme">com.mugame.mobile</string>
 </resources>

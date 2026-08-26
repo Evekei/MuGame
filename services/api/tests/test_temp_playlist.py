@@ -15,7 +15,7 @@ from app.repositories.track_mapping_repository import TrackMappingRepository
 from app.schemas.account import NeteaseAccountProfile
 from app.schemas.imports import ConfirmedSourcePlaylist, SourceTrackItem
 from app.schemas.matching import NeteaseTrackCandidate
-from app.services.temp_playlist import TempPlaylistService
+from app.services.temp_playlist import TempPlaylistService, shuffled_playback_order
 
 
 class FakeTempPlaylistAdapter:
@@ -67,7 +67,7 @@ def test_temp_playlist_sync_is_idempotent_and_keeps_source_data(tmp_path: Path) 
     assert first.temp_playlist_id == "temp-1"
     assert second.synced_count == 2
     assert first.skipped_count == 1
-    assert adapter.tracks == ["101", "202"]
+    assert adapter.tracks == shuffled_playback_order(["101", "202"], session_id)
     assert adapter.create_calls == 1
     assert before["tracks"] == after["tracks"]
 
@@ -83,7 +83,7 @@ def test_temp_playlist_sync_retries_failed_batch(tmp_path: Path) -> None:
     response = service.sync(session_id)
 
     assert response.status == "ready"
-    assert adapter.tracks == ["101", "202"]
+    assert adapter.tracks == shuffled_playback_order(["101", "202"], session_id)
     assert [batch.status for batch in response.batches[-2:]] == ["failed", "ok"]
     assert [batch.attempt for batch in response.batches[-2:]] == [1, 2]
 
@@ -137,7 +137,19 @@ def test_temp_playlist_sync_duplicate_song_id_is_not_skipped(tmp_path: Path) -> 
 
     assert response.synced_count == 2
     assert response.skipped_count == 1
-    assert adapter.tracks == ["101", "202"]
+    assert adapter.tracks == shuffled_playback_order(["101", "202"], session_id)
+
+
+def test_temp_playlist_playback_order_is_shuffled_and_stable() -> None:
+    ids = ["101", "202", "303", "404", "505"]
+
+    first = shuffled_playback_order(ids, "session-1")
+    second = shuffled_playback_order(ids, "session-1")
+
+    assert first == second
+    assert first != ids
+    assert sorted(first) == sorted(ids)
+    assert ids == ["101", "202", "303", "404", "505"]
 
 
 def test_temp_playlist_sync_api_returns_auth_expired(tmp_path: Path) -> None:

@@ -1,21 +1,5 @@
 import type { Contributor } from "./imports";
 
-export type PlaybackStatus =
-  | "idle"
-  | "loading"
-  | "playing"
-  | "paused"
-  | "ended"
-  | "error";
-
-export interface PlaybackState {
-  state: PlaybackStatus;
-  currentTimeMs: number;
-  durationMs: number;
-  currentTrackId?: string;
-  lastError?: string;
-}
-
 export interface PlayerTrack {
   id: string;
   netease_song_id: string;
@@ -26,15 +10,20 @@ export interface PlayerTrack {
   cover_url?: string;
 }
 
-export interface LyricLine {
-  time_ms: number;
-  text: string;
-  translation?: string;
-}
+export type NeteasePlaybackMonitorStatus =
+  | "unsupported"
+  | "permission_required"
+  | "not_playing"
+  | "ready";
 
-export interface LyricsResponse {
-  track_id: string;
-  original_lrc: string;
-  translated_lrc?: string;
-  parsed_lines: LyricLine[];
+export interface NeteasePlaybackMetadata {
+  status: NeteasePlaybackMonitorStatus;
+  package_name?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  duration_ms?: number;
+  media_id?: string;
+  playback_state?: string;
+  updated_at_ms: number;
 }

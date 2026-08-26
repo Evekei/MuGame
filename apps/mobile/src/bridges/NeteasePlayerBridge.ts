@@ -1,7 +1,7 @@
 "use client";
 
-import type { PlaybackState } from "@mugame/contracts/player";
-import { registerPlugin, WebPlugin } from "@capacitor/core";
+import type { NeteasePlaybackMetadata } from "@mugame/contracts/player";
+import { registerPlugin, WebPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export type NeteasePlayerBridgeErrorCode =
   | "native_unavailable"
@@ -13,17 +13,20 @@ export type NeteasePlayerBridgeErrorCode =
   | "media_session_unavailable";
 
 export interface NeteasePlayerBridge {
+  addListener: (
+    eventName: "neteasePlaybackMetadataChanged",
+    listenerFunc: (metadata: NeteasePlaybackMetadata) => void
+  ) => Promise<PluginListenerHandle>;
   destroy: () => Promise<void>;
   ensureLoggedIn: () => Promise<void>;
-  getPlaybackState: () => Promise<PlaybackState>;
+  getCurrentPlaybackMetadata: () => Promise<NeteasePlaybackMetadata>;
   initialize: () => Promise<void>;
+  isPlaylistAutoplayEnabled: () => Promise<{ enabled: boolean }>;
+  isPlaybackMonitorEnabled: () => Promise<{ enabled: boolean }>;
   loadPlaylist: (options: { netease_playlist_id: string }) => Promise<void>;
-  loadTrack: (options: { netease_song_id: string }) => Promise<void>;
-  next: () => Promise<void>;
-  pause: () => Promise<void>;
+  openPlaylistAutoplaySettings: () => Promise<void>;
+  openPlaybackMonitorSettings: () => Promise<void>;
   play: () => Promise<void>;
-  previous: () => Promise<void>;
-  seek: (options: { ms: number }) => Promise<void>;
 }
 
 export class NeteasePlayerBridgeError extends Error {
@@ -45,12 +48,10 @@ class NeteasePlayerWebFallback extends WebPlugin implements NeteasePlayerBridge 
     throw nativeUnavailable();
   }
 
-  async getPlaybackState(): Promise<PlaybackState> {
+  async getCurrentPlaybackMetadata(): Promise<NeteasePlaybackMetadata> {
     return {
-      state: "error",
-      currentTimeMs: 0,
-      durationMs: 0,
-      lastError: "NetEase player requires the Android or iOS app."
+      status: "unsupported",
+      updated_at_ms: Date.now()
     };
   }
 
@@ -58,31 +59,27 @@ class NeteasePlayerWebFallback extends WebPlugin implements NeteasePlayerBridge 
     throw nativeUnavailable();
   }
 
-  async loadTrack() {
-    throw nativeUnavailable();
+  async isPlaylistAutoplayEnabled() {
+    return { enabled: false };
+  }
+
+  async isPlaybackMonitorEnabled() {
+    return { enabled: false };
   }
 
   async loadPlaylist() {
     throw nativeUnavailable();
   }
 
-  async next() {
+  async openPlaybackMonitorSettings() {
     throw nativeUnavailable();
   }
 
-  async pause() {
+  async openPlaylistAutoplaySettings() {
     throw nativeUnavailable();
   }
 
   async play() {
-    throw nativeUnavailable();
-  }
-
-  async previous() {
-    throw nativeUnavailable();
-  }
-
-  async seek() {
     throw nativeUnavailable();
   }
 }

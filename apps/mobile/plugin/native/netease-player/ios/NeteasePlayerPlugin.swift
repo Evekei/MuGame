@@ -8,6 +8,11 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "ensureLoggedIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "isPlaybackMonitorEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openPlaybackMonitorSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "isPlaylistAutoplayEnabled", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openPlaylistAutoplaySettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getCurrentPlaybackMetadata", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "loadPlaylist", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "loadTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "next", returnType: CAPPluginReturnPromise),
@@ -19,8 +24,9 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "destroy", returnType: CAPPluginReturnPromise)
     ]
 
-    private static let playlistURLPrefix = "https://music.163.com/playlist?id="
-    private static let songURLPrefix = "https://music.163.com/song?id="
+    private static let playlistURLPrefix = "orpheus://playlist/"
+    private static let songURLPrefix = "orpheus://song/"
+    private static let autoplaySuffix = "/?autoplay=1"
 
     private var currentTrackId: String?
     private var preparedURL: URL?
@@ -35,13 +41,38 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    @objc func isPlaybackMonitorEnabled(_ call: CAPPluginCall) {
+        call.resolve(["enabled": false])
+    }
+
+    @objc func openPlaybackMonitorSettings(_ call: CAPPluginCall) {
+        call.reject("NetEase playback monitoring is not available on iOS.",
+                    "player_action_unsupported")
+    }
+
+    @objc func isPlaylistAutoplayEnabled(_ call: CAPPluginCall) {
+        call.resolve(["enabled": false])
+    }
+
+    @objc func openPlaylistAutoplaySettings(_ call: CAPPluginCall) {
+        call.reject("NetEase playlist autoplay is not available on iOS.",
+                    "player_action_unsupported")
+    }
+
+    @objc func getCurrentPlaybackMetadata(_ call: CAPPluginCall) {
+        call.resolve([
+            "status": "unsupported",
+            "updated_at_ms": Int(Date().timeIntervalSince1970 * 1000)
+        ])
+    }
+
     @objc func loadTrack(_ call: CAPPluginCall) {
         guard let songId = call.getString("netease_song_id"), !songId.isEmpty else {
             call.reject("netease_song_id is required.", "invalid_track_id")
             return
         }
         currentTrackId = songId
-        prepareURL(Self.songURLPrefix + songId)
+        prepareURL(Self.songURLPrefix + songId + Self.autoplaySuffix)
         call.resolve()
     }
 
@@ -51,7 +82,7 @@ public class NeteasePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         currentTrackId = nil
-        prepareURL(Self.playlistURLPrefix + playlistId)
+        prepareURL(Self.playlistURLPrefix + playlistId + Self.autoplaySuffix)
         call.resolve()
     }
 

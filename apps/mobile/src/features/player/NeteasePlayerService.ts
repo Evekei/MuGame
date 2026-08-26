@@ -1,5 +1,5 @@
 import type { MatchedTrackItem } from "@mugame/contracts/imports";
-import type { PlaybackState, PlayerTrack } from "@mugame/contracts/player";
+import type { PlayerTrack } from "@mugame/contracts/player";
 import {
   getNeteasePlayerBridge,
   type NeteasePlayerBridge
@@ -23,7 +23,6 @@ const defaultDependencies: NeteasePlayerServiceDependencies = {
 };
 
 export class NeteasePlayerService {
-  private playableTracks: PlayerTrack[] = [];
   private tempPlaylistId?: string;
 
   constructor(private dependencies = defaultDependencies) {}
@@ -43,7 +42,6 @@ export class NeteasePlayerService {
     options: StartSessionOptions = {}
   ): PlayerSessionSummary {
     const playableTracks = toPlayableTracks(tracks);
-    this.playableTracks = playableTracks;
     this.tempPlaylistId = options.tempPlaylistId;
     return {
       playableCount: playableTracks.length,
@@ -51,43 +49,13 @@ export class NeteasePlayerService {
     };
   }
 
-  async playNext() {
-    await this.dependencies.bridge.next();
-    return this.currentTrackFromPlayback();
-  }
-
-  async playPrevious() {
-    await this.dependencies.bridge.previous();
-    return this.currentTrackFromPlayback();
-  }
-
   async play() {
     await this.dependencies.bridge.play();
   }
 
-  async pause() {
-    await this.dependencies.bridge.pause();
-  }
-
-  async seek(ms: number) {
-    await this.dependencies.bridge.seek({ ms });
-  }
-
-  getPlaybackState(): Promise<PlaybackState> {
-    return this.dependencies.bridge.getPlaybackState();
-  }
-
   async destroy() {
     await this.dependencies.bridge.destroy();
-    this.playableTracks = [];
     this.tempPlaylistId = undefined;
-  }
-
-  private async currentTrackFromPlayback() {
-    const state = await this.dependencies.bridge.getPlaybackState();
-    return this.playableTracks.find(
-      (track) => track.netease_song_id === state.currentTrackId
-    );
   }
 }
 

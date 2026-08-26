@@ -27,59 +27,36 @@ describe("NeteasePlayerService", () => {
     expect(bridge.loadPlaylist).toHaveBeenCalledWith({ netease_playlist_id: "temp-1" });
   });
 
-  it("delegates next and previous to NetEase and maps returned song id to metadata", async () => {
-    const bridge = createBridge();
-    bridge.getPlaybackState = vi.fn().mockResolvedValue({
-      state: "playing",
-      currentTimeMs: 0,
-      durationMs: 0,
-      currentTrackId: "song-2"
-    });
-    const service = new NeteasePlayerService({ bridge });
-
-    service.startSession([matched("1"), matched("2")]);
-    const next = await service.playNext();
-    const previous = await service.playPrevious();
-
-    expect(bridge.next).toHaveBeenCalledOnce();
-    expect(bridge.previous).toHaveBeenCalledOnce();
-    expect(next?.id).toBe("2");
-    expect(previous?.id).toBe("2");
-  });
-
-  it("delegates playback controls to the bridge", async () => {
+  it("opens NetEase playback and tears down the bridge", async () => {
     const bridge = createBridge();
     const service = new NeteasePlayerService({ bridge });
 
     await service.initialize();
-    await service.pause();
-    await service.seek(42_000);
+    await service.play();
     await service.destroy();
 
     expect(bridge.initialize).toHaveBeenCalledOnce();
-    expect(bridge.pause).toHaveBeenCalledOnce();
-    expect(bridge.seek).toHaveBeenCalledWith({ ms: 42_000 });
+    expect(bridge.play).toHaveBeenCalledOnce();
     expect(bridge.destroy).toHaveBeenCalledOnce();
   });
 });
 
 function createBridge(): NeteasePlayerBridge {
   return {
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
     destroy: vi.fn().mockResolvedValue(undefined),
     ensureLoggedIn: vi.fn().mockResolvedValue(undefined),
-    getPlaybackState: vi.fn().mockResolvedValue({
-      state: "idle",
-      currentTimeMs: 0,
-      durationMs: 0
+    getCurrentPlaybackMetadata: vi.fn().mockResolvedValue({
+      status: "permission_required",
+      updated_at_ms: 1
     }),
     initialize: vi.fn().mockResolvedValue(undefined),
+    isPlaylistAutoplayEnabled: vi.fn().mockResolvedValue({ enabled: false }),
+    isPlaybackMonitorEnabled: vi.fn().mockResolvedValue({ enabled: false }),
     loadPlaylist: vi.fn().mockResolvedValue(undefined),
-    loadTrack: vi.fn().mockResolvedValue(undefined),
-    next: vi.fn().mockResolvedValue(undefined),
-    pause: vi.fn().mockResolvedValue(undefined),
-    play: vi.fn().mockResolvedValue(undefined),
-    previous: vi.fn().mockResolvedValue(undefined),
-    seek: vi.fn().mockResolvedValue(undefined)
+    openPlaylistAutoplaySettings: vi.fn().mockResolvedValue(undefined),
+    openPlaybackMonitorSettings: vi.fn().mockResolvedValue(undefined),
+    play: vi.fn().mockResolvedValue(undefined)
   };
 }
 

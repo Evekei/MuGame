@@ -10,15 +10,14 @@ describe("NeteasePlayerBridge web contract", () => {
 
     expect(typeof bridge.destroy).toBe("function");
     expect(typeof bridge.ensureLoggedIn).toBe("function");
-    expect(typeof bridge.getPlaybackState).toBe("function");
+    expect(typeof bridge.getCurrentPlaybackMetadata).toBe("function");
     expect(typeof bridge.initialize).toBe("function");
+    expect(typeof bridge.isPlaylistAutoplayEnabled).toBe("function");
+    expect(typeof bridge.isPlaybackMonitorEnabled).toBe("function");
     expect(typeof bridge.loadPlaylist).toBe("function");
-    expect(typeof bridge.loadTrack).toBe("function");
-    expect(typeof bridge.next).toBe("function");
-    expect(typeof bridge.pause).toBe("function");
+    expect(typeof bridge.openPlaylistAutoplaySettings).toBe("function");
+    expect(typeof bridge.openPlaybackMonitorSettings).toBe("function");
     expect(typeof bridge.play).toBe("function");
-    expect(typeof bridge.previous).toBe("function");
-    expect(typeof bridge.seek).toBe("function");
   });
 
   it("reports native_unavailable in plain browser tests", async () => {
@@ -29,12 +28,12 @@ describe("NeteasePlayerBridge web contract", () => {
     } satisfies Partial<NeteasePlayerBridgeError>);
   });
 
-  it("returns a diagnostic playback state in web fallback", async () => {
+  it("returns unsupported metadata in plain browser tests", async () => {
     const bridge = getNeteasePlayerBridge();
 
-    await expect(bridge.getPlaybackState()).resolves.toMatchObject({
-      state: "error",
-      lastError: expect.stringContaining("Android or iOS")
+    await expect(bridge.getCurrentPlaybackMetadata()).resolves.toMatchObject({
+      status: "unsupported",
+      updated_at_ms: expect.any(Number)
     });
   });
 });
