@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   configureImportPreviewService,
+  deleteImportSession,
+  getImportHistory,
   getMatchJob,
   retryImportAnalytics,
+  restoreTempPlaylist,
   startImportOrchestration,
   startFullImport,
   startMatchJob,
@@ -209,17 +212,54 @@ describe("importPreviewService", () => {
 
     expect(retryAnalyticsApi).toHaveBeenCalledWith("session-1");
   });
+
+  it("reads import history through the API layer", async () => {
+    const getHistoryApi = vi.fn().mockResolvedValue([{ session_id: "session-1" }]);
+    configureImportPreviewService(mockApi({ getHistory: getHistoryApi }));
+
+    await getImportHistory(10);
+
+    expect(getHistoryApi).toHaveBeenCalledWith(10);
+  });
+
+  it("restores a historical temp playlist through the API layer", async () => {
+    const restoreTempPlaylistApi = vi.fn().mockResolvedValue({ id: "session-1" });
+    configureImportPreviewService(
+      mockApi({ restoreTempPlaylist: restoreTempPlaylistApi })
+    );
+
+    await restoreTempPlaylist("session-1");
+
+    expect(restoreTempPlaylistApi).toHaveBeenCalledWith("session-1");
+  });
+
+  it("deletes an import session through the API layer", async () => {
+    const deleteImportSessionApi = vi.fn().mockResolvedValue({
+      deleted: true,
+      session_id: "session-1"
+    });
+    configureImportPreviewService(
+      mockApi({ deleteImportSession: deleteImportSessionApi })
+    );
+
+    await deleteImportSession("session-1");
+
+    expect(deleteImportSessionApi).toHaveBeenCalledWith("session-1");
+  });
 });
 
 function mockApi(overrides = {}) {
   return {
     confirmMatch: vi.fn(),
+    deleteImportSession: vi.fn(),
+    getHistory: vi.fn(),
     getMatchJob: vi.fn(),
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
     startOrchestration: vi.fn(),

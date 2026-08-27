@@ -48,6 +48,9 @@ def test_analytics_v1_metrics_have_exact_expected_values() -> None:
             "intersection": 1,
             "union": 4,
             "jaccard": 0.25,
+            "shared_tracks": [
+                track_payload("t1", "Shared Song", ["Artist X"], ["alice", "bob"]),
+            ],
         }
     ]
     assert metrics["top_artists"]["artists"] == [
@@ -56,24 +59,42 @@ def test_analytics_v1_metrics_have_exact_expected_values() -> None:
             "artist_key": "artist x",
             "unique_track_count": 2,
             "participant_count": 2,
+            "tracks": [
+                track_payload("t3", "Bob Song", ["Artist X", "Artist Z"], ["bob"]),
+                track_payload("t1", "Shared Song", ["Artist X"], ["alice", "bob"]),
+            ],
         },
         {
             "artist": "Artist W",
             "artist_key": "artist w",
             "unique_track_count": 1,
             "participant_count": 1,
+            "tracks": [
+                track_payload("t4", "Alice Song", ["Artist W"], ["alice"]),
+            ],
         },
         {
             "artist": "Artist Y",
             "artist_key": "artist y",
             "unique_track_count": 1,
             "participant_count": 1,
+            "tracks": [
+                track_payload(
+                    "t2",
+                    "Alice Multi Playlist Song",
+                    ["Artist Y"],
+                    ["alice"],
+                ),
+            ],
         },
         {
             "artist": "Artist Z",
             "artist_key": "artist z",
             "unique_track_count": 1,
             "participant_count": 1,
+            "tracks": [
+                track_payload("t3", "Bob Song", ["Artist X", "Artist Z"], ["bob"]),
+            ],
         },
     ]
     assert metrics["pairwise_artist_similarity"]["pairs"] == [
@@ -83,6 +104,7 @@ def test_analytics_v1_metrics_have_exact_expected_values() -> None:
             "intersection": 1,
             "union": 4,
             "jaccard": 0.25,
+            "shared_artists": ["Artist X"],
         }
     ]
     assert metrics["unique_taste_by_owner"]["owners"] == [
@@ -91,18 +113,32 @@ def test_analytics_v1_metrics_have_exact_expected_values() -> None:
             "total_track_count": 3,
             "exclusive_track_count": 2,
             "exclusive_track_ratio": 0.666667,
+            "exclusive_tracks": [
+                track_payload(
+                    "t2",
+                    "Alice Multi Playlist Song",
+                    ["Artist Y"],
+                    ["alice"],
+                ),
+                track_payload("t4", "Alice Song", ["Artist W"], ["alice"]),
+            ],
             "total_artist_count": 3,
             "exclusive_artist_count": 2,
             "exclusive_artist_ratio": 0.666667,
+            "exclusive_artists": ["Artist W", "Artist Y"],
         },
         {
             "owner": {"owner_source_id": "bob", "owner_nickname": "Bob"},
             "total_track_count": 2,
             "exclusive_track_count": 1,
             "exclusive_track_ratio": 0.5,
+            "exclusive_tracks": [
+                track_payload("t3", "Bob Song", ["Artist X", "Artist Z"], ["bob"]),
+            ],
             "total_artist_count": 2,
             "exclusive_artist_count": 1,
             "exclusive_artist_ratio": 0.5,
+            "exclusive_artists": ["Artist Z"],
         },
     ]
     assert metrics["most_similar_pair"]["pair"] == {
@@ -263,6 +299,26 @@ def contributor(playlist_id: str, owner_id: str, owner_name: str) -> Contributor
         owner_source_id=owner_id,
         owner_nickname=owner_name,
     )
+
+
+def track_payload(
+    track_id: str,
+    title: str,
+    artists: list[str],
+    owner_ids: list[str],
+) -> dict:
+    return {
+        "track_id": track_id,
+        "display_title": title,
+        "artists": artists,
+        "contributor_count": len(owner_ids),
+        "contributors": [owner_payload(owner_id) for owner_id in owner_ids],
+    }
+
+
+def owner_payload(owner_id: str) -> dict[str, str]:
+    names = {"alice": "Alice", "bob": "Bob"}
+    return {"owner_source_id": owner_id, "owner_nickname": names[owner_id]}
 
 
 class FakeImportRepository:

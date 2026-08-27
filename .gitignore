@@ -26,6 +26,9 @@ venv/
 
 **/android/.gradle/
 **/android/app/build/
+*.jks
+*.keystore
+keystore.properties
 **/ios/Pods/
 **/ios/App/build/
 

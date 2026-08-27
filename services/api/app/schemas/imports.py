@@ -148,6 +148,31 @@ class ImportPlaybackPayload(BaseModel):
     tracks: list[MatchedTrackItem]
 
 
+class ImportHistorySourceSummary(BaseModel):
+    platform: Literal["netease", "qq"]
+    source_playlist_id: str
+    title: str
+    owner_nickname: str
+    import_track_limit: int | None = None
+    read_count: int = 0
+
+
+class ImportHistoryItem(BaseModel):
+    session_id: str
+    ready_to_play_at: str
+    temp_playlist_id: str
+    playable_track_count: int
+    source_playlists: list[ImportHistorySourceSummary]
+    owner_nicknames: list[str]
+    created_at: str
+    updated_at: str
+
+
+class ImportSessionDeleteResponse(BaseModel):
+    session_id: str
+    deleted: bool
+
+
 class ImportSessionResponse(BaseModel):
     id: str
     status: Literal[

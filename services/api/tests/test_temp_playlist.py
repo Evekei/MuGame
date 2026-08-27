@@ -154,7 +154,7 @@ def test_temp_playlist_playback_order_is_shuffled_and_stable() -> None:
     assert ids == ["101", "202", "303", "404", "505"]
 
 
-def test_temp_playlist_sync_caps_netease_batches_at_twenty(tmp_path: Path) -> None:
+def test_temp_playlist_sync_caps_netease_batches_at_two_hundred(tmp_path: Path) -> None:
     service, adapter, import_repo, _mapping_repo, session_id = sync_fixture(
         tmp_path,
         batch_size=200,
@@ -163,14 +163,14 @@ def test_temp_playlist_sync_caps_netease_batches_at_twenty(tmp_path: Path) -> No
     import_repo.save_source_tracks(
         session_id,
         source,
-        [track("netease", str(1000 + index), f"Song {index}", "Alice") for index in range(45)],
+        [track("netease", str(1000 + index), f"Song {index}", "Alice") for index in range(250)],
     )
 
     response = service.sync(session_id)
 
     assert response.status == "ready"
-    assert response.synced_count == 45
-    assert [len(batch) for batch in adapter.add_batches] == [20, 20, 5]
+    assert response.synced_count == 250
+    assert [len(batch) for batch in adapter.add_batches] == [200, 50]
 
 
 def test_temp_playlist_sync_api_returns_auth_expired(tmp_path: Path) -> None:

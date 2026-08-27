@@ -64,6 +64,34 @@ class ImportOrchestrator:
         self.analytics_service.start_async(job_id, session_id)
         return self.import_repository.get_session(session_id)
 
+    def restore_temp_playlist(self, session_id: str) -> ImportSessionResponse:
+        session = self.import_repository.get_session(session_id)
+        if (
+            session.status != "ready_to_play"
+            or not self.orchestration_repository.has_orchestration(session_id)
+        ):
+            raise AppError(
+                "IMPORT_HISTORY_NOT_READY",
+                "Only ready import history can be restored.",
+                409,
+            )
+        deduped = self.dedupe_service.dedupe_session(session)
+        target_ids, _skipped = playable_netease_plan(deduped.tracks, self.mapping_repository)
+        response = self.temp_playlist_service.sync(session_id)
+        if response.status != "ready":
+            raise AppError(
+                response.error or "NETEASE_SYNC_FAILED",
+                "Temporary playlist restore failed.",
+                502,
+            )
+        self.orchestration_repository.mark_ready(
+            session_id,
+            response.temp_playlist_id,
+            response.synced_count,
+            len(target_ids),
+        )
+        return self.import_repository.get_session(session_id)
+
     def run(self, session_id: str, start_stage: str = "importing") -> None:
         try:
             self._run(session_id, start_stage)

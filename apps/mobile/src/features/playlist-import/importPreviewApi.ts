@@ -1,5 +1,7 @@
 import type {
   FullImportRequest,
+  ImportHistoryItem,
+  ImportSessionDeleteResponse,
   ImportSessionResponse,
   ImportPreviewRequest,
   ImportPreviewResponse,
@@ -9,19 +11,22 @@ import type {
   MatchTracksResponse,
   TempPlaylistSyncResponse
 } from "@mugame/contracts/imports";
-import { getJson, postJson } from "@/lib/api/client";
+import { deleteJson, getJson, postJson } from "@/lib/api/client";
 
 export interface ImportPreviewApi {
   confirmMatch: (
     sessionId: string,
     request: ManualMatchConfirmRequest
   ) => Promise<MatchedTrackItem>;
+  deleteImportSession: (sessionId: string) => Promise<ImportSessionDeleteResponse>;
+  getHistory: (limit?: number) => Promise<ImportHistoryItem[]>;
   getSession: (sessionId: string) => Promise<ImportSessionResponse>;
   getMatchJob: (jobId: string) => Promise<MatchJobResponse>;
   matchTracks: (sessionId: string) => Promise<MatchTracksResponse>;
   preview: (request: ImportPreviewRequest) => Promise<ImportPreviewResponse>;
   retryAnalytics: (sessionId: string) => Promise<ImportSessionResponse>;
   retryFullImport: (sessionId: string) => Promise<ImportSessionResponse>;
+  restoreTempPlaylist: (sessionId: string) => Promise<ImportSessionResponse>;
   startMatchJob: (sessionId: string) => Promise<MatchJobResponse>;
   startFullImport: (request: FullImportRequest) => Promise<ImportSessionResponse>;
   startOrchestration: (request: FullImportRequest) => Promise<ImportSessionResponse>;
@@ -34,6 +39,10 @@ export const importPreviewApi: ImportPreviewApi = {
       `/imports/sessions/${sessionId}/matches/confirm`,
       request
     ),
+  deleteImportSession: (sessionId) =>
+    deleteJson<ImportSessionDeleteResponse>(`/imports/sessions/${sessionId}`),
+  getHistory: (limit = 20) =>
+    getJson<ImportHistoryItem[]>(`/imports/history?limit=${limit}`),
   getSession: (sessionId) =>
     getJson<ImportSessionResponse>(`/imports/sessions/${sessionId}`),
   getMatchJob: (jobId) => getJson<MatchJobResponse>(`/imports/match-jobs/${jobId}`),
@@ -47,6 +56,11 @@ export const importPreviewApi: ImportPreviewApi = {
     ),
   retryFullImport: (sessionId) =>
     postJson<ImportSessionResponse>(`/imports/sessions/${sessionId}/retry`, {}),
+  restoreTempPlaylist: (sessionId) =>
+    postJson<ImportSessionResponse>(
+      `/imports/sessions/${sessionId}/restore-temp-playlist`,
+      {}
+    ),
   startMatchJob: (sessionId) =>
     postJson<MatchJobResponse>(`/imports/sessions/${sessionId}/match-jobs`, {}),
   startFullImport: (request) =>

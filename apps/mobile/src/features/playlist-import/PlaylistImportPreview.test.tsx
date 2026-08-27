@@ -174,12 +174,15 @@ describe("PlaylistImportPreview", () => {
 function mockApi(overrides = {}) {
   return {
     confirmMatch: vi.fn(),
+    deleteImportSession: vi.fn(),
+    getHistory: vi.fn(),
     getMatchJob: vi.fn(),
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
     startOrchestration: vi.fn(),

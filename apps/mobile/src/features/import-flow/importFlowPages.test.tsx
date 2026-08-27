@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmPage } from "./ConfirmPage";
@@ -64,6 +64,61 @@ describe("import flow pages", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/confirm"));
     expect(getImportFlowState().previewItems).toHaveLength(1);
+  });
+
+  it("shows an empty temp playlist history on the import page", async () => {
+    configureImportPreviewService(mockApi({ getHistory: vi.fn().mockResolvedValue([]) }));
+
+    render(<ImportPage />);
+
+    expect(await screen.findByText("暂无临时歌单历史。")).toBeInTheDocument();
+  });
+
+  it("restores a temp playlist history item and enters play", async () => {
+    const user = userEvent.setup();
+    const restoreTempPlaylist = vi.fn().mockResolvedValue({
+      ...readySession(),
+      id: "history-session"
+    });
+    configureImportPreviewService(
+      mockApi({
+        getHistory: vi.fn().mockResolvedValue([historyItem()]),
+        restoreTempPlaylist
+      })
+    );
+
+    render(<ImportPage />);
+    await user.click(await screen.findByRole("button", { name: /Alice/ }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/play"));
+    expect(restoreTempPlaylist).toHaveBeenCalledWith("history-session");
+    expect(getImportFlowState().sessionId).toBe("history-session");
+  });
+
+  it("deletes a history item without restoring it", async () => {
+    const user = userEvent.setup();
+    const deleteImportSession = vi.fn().mockResolvedValue({
+      deleted: true,
+      session_id: "history-session"
+    });
+    const restoreTempPlaylist = vi.fn();
+    setStoredImportSession({ ...readySession(), id: "history-session" });
+    configureImportPreviewService(
+      mockApi({
+        deleteImportSession,
+        getHistory: vi.fn().mockResolvedValue([historyItem()]),
+        restoreTempPlaylist
+      })
+    );
+
+    render(<ImportPage />);
+    await user.click(await screen.findByRole("button", { name: "删除" }));
+
+    await waitFor(() => expect(deleteImportSession).toHaveBeenCalledWith("history-session"));
+    expect(restoreTempPlaylist).not.toHaveBeenCalled();
+    expect(screen.getByText("暂无临时歌单历史。")).toBeInTheDocument();
+    expect(getImportFlowState().sessionId).toBeUndefined();
+    expect(getImportFlowState().readyPayload).toBeUndefined();
   });
 
   it("clears a stale import limit when a new preview is identified", async () => {
@@ -190,22 +245,62 @@ describe("import flow pages", () => {
       "true"
     );
   });
+
+  it("scrolls the stats tabs horizontally during a swipe", () => {
+    render(<StatsPage />);
+
+    const tabs = screen.getByRole("tablist", { name: "统计分区" });
+    tabs.scrollLeft = 30;
+    fireEvent.touchStart(tabs, {
+      touches: [{ clientX: 200, clientY: 20 }]
+    });
+    fireEvent.touchMove(tabs, {
+      touches: [{ clientX: 120, clientY: 24 }]
+    });
+
+    expect(tabs.scrollLeft).toBe(110);
+  });
 });
 
 function mockApi(overrides = {}) {
   return {
     confirmMatch: vi.fn(),
+    deleteImportSession: vi.fn(),
+    getHistory: vi.fn().mockResolvedValue([]),
     getMatchJob: vi.fn(),
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
     startOrchestration: vi.fn(),
     syncTempPlaylist: vi.fn(),
     ...overrides
+  };
+}
+
+function historyItem() {
+  return {
+    session_id: "history-session",
+    ready_to_play_at: "2026-08-27T00:00:00Z",
+    temp_playlist_id: "temp-1",
+    playable_track_count: 1,
+    source_playlists: [
+      {
+        platform: "netease" as const,
+        source_playlist_id: "1",
+        title: "朋友的歌单",
+        owner_nickname: "Alice",
+        import_track_limit: 40,
+        read_count: 1
+      }
+    ],
+    owner_nicknames: ["Alice"],
+    created_at: "2026-08-27T00:00:00Z",
+    updated_at: "2026-08-27T00:00:00Z"
   };
 }
 

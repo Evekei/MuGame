@@ -18,7 +18,7 @@ from app.schemas.temp_playlist import (
 from app.services.temp_playlist_batches import add_target_tracks, run_batches
 from app.services.track_dedupe import TrackDedupeService
 
-NETEASE_TRACK_MANIPULATE_BATCH_LIMIT = 20
+NETEASE_TRACK_MANIPULATE_BATCH_LIMIT = 200
 
 
 class TempPlaylistService:

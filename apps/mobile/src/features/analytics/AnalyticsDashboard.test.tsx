@@ -76,6 +76,64 @@ describe("AnalyticsDashboard", () => {
     );
   });
 
+  it("shows top artist track details with contributor owners", async () => {
+    const user = userEvent.setup();
+    render(<AnalyticsDashboard activeSection="topArtists" session={sessionWithMetrics()} />);
+
+    const card = screen.getByLabelText("Top 歌手 / 共同歌手");
+    const detailButton = within(card).getByRole("button", { name: "查看详情" });
+    expect(within(card).getByText("Artist A")).toBeInTheDocument();
+    expect(within(card).getByText("4首")).toBeInTheDocument();
+    expect(within(card).queryByText("歌手歌曲一")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Alice、Bob")).not.toBeInTheDocument();
+    expect(
+      within(card).getByText("Artist A").compareDocumentPosition(detailButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    await user.click(detailButton);
+
+    expect(within(card).getByText("歌手歌曲一")).toBeInTheDocument();
+    expect(within(card).getByText("歌手歌曲四")).toBeInTheDocument();
+    expect(within(card).queryByText("歌手歌曲一-Artist A")).not.toBeInTheDocument();
+    expect(within(card).getAllByText("Alice、Bob")).toHaveLength(4);
+  });
+
+  it("shows shared track details ordered by resonance", async () => {
+    const user = userEvent.setup();
+    render(<AnalyticsDashboard activeSection="sharedTracks" session={sessionWithMetrics()} />);
+
+    const card = screen.getByLabelText("你们最有共鸣的歌");
+    await user.click(within(card).getByRole("button", { name: "查看详情" }));
+
+    expect(within(card).getByText(hasText("共同歌曲-Artist A"))).toBeInTheDocument();
+    expect(within(card).getByText("Alice、Bob")).toBeInTheDocument();
+  });
+
+  it("shows pairwise overlapping tracks and artists in details", async () => {
+    const user = userEvent.setup();
+    render(<AnalyticsDashboard activeSection="pairwise" session={sessionWithMetrics()} />);
+
+    const card = screen.getByLabelText("两两音乐品味");
+    await user.click(within(card).getByRole("button", { name: "查看详情" }));
+
+    expect(within(card).getByText("重合歌曲")).toBeInTheDocument();
+    expect(within(card).getByText(hasText("共同歌曲-Artist A"))).toBeInTheDocument();
+    expect(within(card).getByText("Artist A")).toBeInTheDocument();
+  });
+
+  it("shows unique artists in unique taste details", async () => {
+    const user = userEvent.setup();
+    render(<AnalyticsDashboard activeSection="uniqueTaste" session={sessionWithMetrics()} />);
+
+    const card = screen.getByLabelText("独特性");
+    await user.click(within(card).getByRole("button", { name: "查看详情" }));
+
+    expect(within(card).getByText("独特歌手")).toBeInTheDocument();
+    expect(within(card).getByText("Artist Unique")).toBeInTheDocument();
+    expect(within(card).getByText(hasText("独占歌曲-Artist A"))).toBeInTheDocument();
+  });
+
   it("keeps ready cards visible when a failed card is retried", async () => {
     const user = userEvent.setup();
     const retryAnalytics = vi.fn().mockResolvedValue({
@@ -160,8 +218,12 @@ function sessionWithMetrics(
   analyticsStatus: ImportSessionResponse["analytics_status"] = keys ? "running" : "completed",
   includeMultiplePairs = false
 ): ImportSessionResponse {
-  const trackPairs = includeMultiplePairs ? [pair(0.25), pair(0.1, "cara", "Cara")] : [pair(0.25)];
-  const artistPairs = includeMultiplePairs ? [pair(0.5), pair(0.2, "cara", "Cara")] : [pair(0.5)];
+  const trackPairs = includeMultiplePairs
+    ? [pair(0.25), pair(0.1, "cara", "Cara")]
+    : [pair(0.25)];
+  const artistPairs = includeMultiplePairs
+    ? [artistPair(0.5), artistPair(0.2, "cara", "Cara")]
+    : [artistPair(0.5)];
   const genrePairs = includeMultiplePairs ? [pair(0.75), pair(0.3, "cara", "Cara")] : [pair(0.75)];
   const allMetrics = [
     metric("overview", overviewPayload()),
@@ -169,14 +231,66 @@ function sessionWithMetrics(
     metric("pairwise_track_similarity", { pairs: trackPairs }),
     metric("pairwise_artist_similarity", { pairs: artistPairs }),
     metric("pairwise_genre_similarity", { pairs: genrePairs }),
-    metric("top_artists", { artists: [{ artist: "Artist A", unique_track_count: 2, participant_count: 2 }] }),
+    metric("top_artists", {
+      artists: [
+        {
+          artist: "Artist A",
+          artist_key: "artist a",
+          participant_count: 2,
+          tracks: [
+            {
+              ...sharedTrack(),
+              display_title: "歌手歌曲一"
+            },
+            {
+              ...sharedTrack(),
+              display_title: "歌手歌曲二",
+              track_id: "track-2"
+            },
+            {
+              ...sharedTrack(),
+              display_title: "歌手歌曲三",
+              track_id: "track-3"
+            },
+            {
+              ...sharedTrack(),
+              display_title: "歌手歌曲四",
+              track_id: "track-4"
+            }
+          ],
+          unique_track_count: 4
+        }
+      ]
+    }),
     metric("top_genres", {
       data_coverage: { known_track_count: 2, total_track_count: 3, ratio: 0.67 },
       confidence: { average: 0.8, assignment_count: 2 },
       overall: [{ genre: "pop", share: 0.7 }]
     }),
     metric("shared_genres", { genres: [{ genre: "pop", participant_count: 2, unique_track_count: 2 }] }),
-    metric("unique_taste_by_owner", { owners: [] }),
+    metric("unique_taste_by_owner", {
+      owners: [
+        {
+          exclusive_artist_count: 1,
+          exclusive_artist_ratio: 0.5,
+          exclusive_artists: ["Artist Unique"],
+          exclusive_track_count: 1,
+          exclusive_track_ratio: 0.5,
+          exclusive_tracks: [
+            {
+              ...sharedTrack(),
+              contributor_count: 1,
+              contributors: [{ owner_source_id: "alice", owner_nickname: "Alice" }],
+              display_title: "独占歌曲",
+              track_id: "unique-track"
+            }
+          ],
+          owner: { owner_source_id: "alice", owner_nickname: "Alice" },
+          total_artist_count: 2,
+          total_track_count: 2
+        }
+      ]
+    }),
     metric("top_albums", { data_coverage: { known_track_count: 1, total_track_count: 3, ratio: 0.33 }, albums: [] }),
     metric("shared_albums", { albums: [] }),
     metric("artist_diversity", { overall: { unique_artists: 2, top_artist_share: 0.5, shannon_entropy: 1 } }),
@@ -218,6 +332,7 @@ function sharedTrack() {
   return {
     track_id: "track-1",
     display_title: "共同歌曲",
+    artists: ["Artist A"],
     contributor_count: 2,
     contributors: [
       { owner_source_id: "alice", owner_nickname: "Alice" },
@@ -226,23 +341,44 @@ function sharedTrack() {
   };
 }
 
+function hasText(text: string) {
+  return (_content: string, element: Element | null) => element?.textContent === text;
+}
+
 function pair(jaccard: number, ownerBId = "bob", ownerBName = "Bob") {
   return {
     owner_a: { owner_source_id: "alice", owner_nickname: "Alice" },
     owner_b: { owner_source_id: ownerBId, owner_nickname: ownerBName },
-    jaccard
+    intersection: 1,
+    jaccard,
+    shared_tracks: [sharedTrack()],
+    union: 4
+  };
+}
+
+function artistPair(jaccard: number, ownerBId = "bob", ownerBName = "Bob") {
+  return {
+    owner_a: { owner_source_id: "alice", owner_nickname: "Alice" },
+    owner_b: { owner_source_id: ownerBId, owner_nickname: ownerBName },
+    intersection: 1,
+    jaccard,
+    shared_artists: ["Artist A"],
+    union: 2
   };
 }
 
 function mockApi(overrides = {}) {
   return {
     confirmMatch: vi.fn(),
+    deleteImportSession: vi.fn(),
+    getHistory: vi.fn(),
     getMatchJob: vi.fn(),
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
     startOrchestration: vi.fn(),

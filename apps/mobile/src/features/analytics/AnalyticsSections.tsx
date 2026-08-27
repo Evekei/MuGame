@@ -2,6 +2,12 @@ import type { ImportSessionResponse } from "@mugame/contracts/imports";
 import { useState } from "react";
 import { AnalyticsCard } from "./AnalyticsCard";
 import {
+  arrayValueAsStrings,
+  ChipList,
+  DetailToggle,
+  TrackDetailList
+} from "./AnalyticsDetailComponents";
+import {
   arrayValue,
   barWidth,
   confidenceText,
@@ -48,20 +54,19 @@ export function OverviewCard({ onRetry, state, view }: CardProps) {
 }
 
 export function SharedTracksCard({ onRetry, state, view }: CardProps) {
-  const tracks = arrayValue(view.payload?.tracks).slice(0, 6);
+  const [showDetails, setShowDetails] = useState(false);
+  const tracks = arrayValue(view.payload?.tracks);
+  const visibleTracks = showDetails ? tracks : tracks.slice(0, 6);
   return (
     <AnalyticsCard onRetry={onRetry} state={state} title="你们最有共鸣的歌">
       <div className="analytics-list">
-        {tracks.map((track) => (
-          <div className="analytics-row" key={stringValue(track.track_id)}>
-            <div>
-              <strong>{stringValue(track.display_title) || "未知歌曲"}</strong>
-              <p>{arrayValue(track.contributors).map(ownerName).join("、")}</p>
-            </div>
-            <span>{numberValue(track.contributor_count)} 人</span>
-          </div>
-        ))}
+        <TrackDetailList tracks={visibleTracks} />
         {tracks.length === 0 ? <p className="analytics-muted">暂无共同歌曲。</p> : null}
+        <DetailToggle
+          enabled={tracks.length > 0}
+          onToggle={() => setShowDetails((current) => !current)}
+          showDetails={showDetails}
+        />
       </div>
     </AnalyticsCard>
   );
@@ -69,6 +74,7 @@ export function SharedTracksCard({ onRetry, state, view }: CardProps) {
 
 export function PairwiseTasteCard({ metrics, onRetry, session, state }: GroupCardProps) {
   const [selectedPairKey, setSelectedPairKey] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const trackPairs = arrayValue(metrics.get("pairwise_track_similarity")?.payload.pairs);
   const artistPairs = arrayValue(metrics.get("pairwise_artist_similarity")?.payload.pairs);
   const genrePairs = arrayValue(metrics.get("pairwise_genre_similarity")?.payload.pairs);
@@ -106,20 +112,53 @@ export function PairwiseTasteCard({ metrics, onRetry, session, state }: GroupCar
             <ScoreLine label="曲风相似度" value={selectedGenrePair?.jaccard} />
           </div>
         ) : null}
+        {showDetails && selectedPair ? (
+          <div className="analytics-detail-panel">
+            <h4>重合歌曲</h4>
+            <TrackDetailList tracks={arrayValue(selectedPair.shared_tracks)} />
+            <h4>重合歌手</h4>
+            <ChipList items={arrayValueAsStrings(selectedArtistPair?.shared_artists)} />
+          </div>
+        ) : null}
         {trackPairs.length === 0 && session.analytics_status === "completed" ? (
           <p className="analytics-muted">参与人数不足，无法形成两两对比。</p>
         ) : null}
+        <DetailToggle
+          enabled={Boolean(selectedPair)}
+          onToggle={() => setShowDetails((current) => !current)}
+          showDetails={showDetails}
+        />
       </div>
     </AnalyticsCard>
   );
 }
 
 export function TopArtistsCard({ onRetry, state, view }: CardProps) {
-  const artists = arrayValue(view.payload?.artists).slice(0, 8);
+  const [showDetails, setShowDetails] = useState(false);
+  const allArtists = arrayValue(view.payload?.artists);
+  const artists = showDetails ? allArtists : allArtists.slice(0, 8);
   const shared = artists.filter((artist) => numberValue(artist.participant_count) >= 2);
   return (
     <AnalyticsCard onRetry={onRetry} state={state} title="Top 歌手 / 共同歌手">
-      <RankList items={artists} labelKey="artist" valueKey="unique_track_count" suffix="首" />
+      <div className="analytics-list">
+        {artists.map((artist) => (
+          <div className="analytics-detail-row" key={stringValue(artist.artist_key)}>
+            <div className="rank-row">
+              <span>{stringValue(artist.artist) || "未知歌手"}</span>
+              <strong>{numberValue(artist.unique_track_count)}首</strong>
+            </div>
+            {showDetails ? (
+              <TrackDetailList compact showArtists={false} tracks={arrayValue(artist.tracks)} />
+            ) : null}
+          </div>
+        ))}
+        {artists.length === 0 ? <p className="analytics-muted">暂无歌手数据。</p> : null}
+        <DetailToggle
+          enabled={allArtists.length > 0}
+          onToggle={() => setShowDetails((current) => !current)}
+          showDetails={showDetails}
+        />
+      </div>
       {shared.length > 0 ? (
         <p className="analytics-muted">共同歌手：{shared.map((artist) => stringValue(artist.artist)).join("、")}</p>
       ) : (
@@ -153,19 +192,35 @@ export function GenresCard({ metrics, onRetry, session, state }: GroupCardProps)
 }
 
 export function UniqueTasteCard({ onRetry, state, view }: CardProps) {
+  const [showDetails, setShowDetails] = useState(false);
   const owners = arrayValue(view.payload?.owners);
   return (
     <AnalyticsCard onRetry={onRetry} state={state} title="独特性">
       <div className="analytics-list">
         {owners.map((row) => (
-          <div className="analytics-row" key={stringValue(recordValue(row.owner).owner_source_id)}>
-            <div>
-              <strong>{ownerName(row.owner)}</strong>
-              <p>独占歌手 {numberValue(row.exclusive_artist_count)}/{numberValue(row.total_artist_count)}</p>
+          <div className="analytics-detail-row" key={stringValue(recordValue(row.owner).owner_source_id)}>
+            <div className="analytics-row">
+              <div>
+                <strong>{ownerName(row.owner)}</strong>
+                <p>独占歌手 {numberValue(row.exclusive_artist_count)}/{numberValue(row.total_artist_count)}</p>
+              </div>
+              <span>{percent(row.exclusive_track_ratio)}</span>
             </div>
-            <span>{percent(row.exclusive_track_ratio)}</span>
+            {showDetails ? (
+              <div className="analytics-detail-panel">
+                <h4>独特歌手</h4>
+                <ChipList items={arrayValueAsStrings(row.exclusive_artists)} />
+                <h4>独占歌曲</h4>
+                <TrackDetailList tracks={arrayValue(row.exclusive_tracks)} />
+              </div>
+            ) : null}
           </div>
         ))}
+        <DetailToggle
+          enabled={owners.length > 0}
+          onToggle={() => setShowDetails((current) => !current)}
+          showDetails={showDetails}
+        />
       </div>
     </AnalyticsCard>
   );

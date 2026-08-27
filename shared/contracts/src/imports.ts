@@ -145,6 +145,31 @@ export interface ImportPlaybackPayload {
   tracks: MatchedTrackItem[];
 }
 
+export interface ImportHistorySourceSummary {
+  platform: PlaylistPlatform;
+  source_playlist_id: string;
+  title: string;
+  owner_nickname: string;
+  import_track_limit?: number;
+  read_count: number;
+}
+
+export interface ImportHistoryItem {
+  session_id: string;
+  ready_to_play_at: string;
+  temp_playlist_id: string;
+  playable_track_count: number;
+  source_playlists: ImportHistorySourceSummary[];
+  owner_nicknames: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportSessionDeleteResponse {
+  session_id: string;
+  deleted: boolean;
+}
+
 export interface Contributor {
   platform: PlaylistPlatform;
   source_playlist_id: string;

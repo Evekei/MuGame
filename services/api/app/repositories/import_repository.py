@@ -14,6 +14,8 @@ from app.repositories.import_records import (
 )
 from app.schemas.imports import (
     ConfirmedSourcePlaylist,
+    ImportHistoryItem,
+    ImportHistorySourceSummary,
     ImportSessionResponse,
     SourceTrackItem,
 )
@@ -200,6 +202,36 @@ class ImportRepository:
             analytics_rows,
         )
 
+    def list_history(self, limit: int = 20) -> list[ImportHistoryItem]:
+        self._ensure_schema()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT import_sessions.id
+                FROM import_sessions
+                JOIN import_orchestrations
+                    ON import_orchestrations.session_id = import_sessions.id
+                WHERE import_orchestrations.status = ?
+                    AND import_orchestrations.temp_playlist_id IS NOT NULL
+                ORDER BY COALESCE(
+                    import_orchestrations.ready_to_play_at,
+                    import_orchestrations.updated_at
+                ) DESC
+                LIMIT ?
+                """,
+                ("ready_to_play", limit),
+            ).fetchall()
+        return [history_item_from_session(self.get_session(str(row["id"]))) for row in rows]
+
+    def delete_session(self, session_id: str) -> bool:
+        self._ensure_schema()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM import_sessions WHERE id = ?",
+                (session_id,),
+            )
+            return cursor.rowcount > 0
+
     def _update_source(
         self,
         source_id: str,
@@ -282,3 +314,45 @@ class ImportRepository:
                 session_id,
             ),
         )
+
+
+def history_item_from_session(session: ImportSessionResponse) -> ImportHistoryItem:
+    temp_playlist_id = session.temp_playlist_id
+    if not temp_playlist_id and session.playback:
+        temp_playlist_id = session.playback.temp_playlist_id
+    return ImportHistoryItem(
+        session_id=session.id,
+        ready_to_play_at=session.ready_to_play_at or session.updated_at,
+        temp_playlist_id=temp_playlist_id or "",
+        playable_track_count=playable_track_count(session),
+        source_playlists=[
+            ImportHistorySourceSummary(
+                platform=source.platform,
+                source_playlist_id=source.source_playlist_id,
+                title=source.title,
+                owner_nickname=source.owner_nickname,
+                import_track_limit=source.import_track_limit,
+                read_count=source.read_count,
+            )
+            for source in session.source_playlists
+        ],
+        owner_nicknames=unique_owner_names(session),
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+def unique_owner_names(session: ImportSessionResponse) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for source in session.source_playlists:
+        if source.owner_nickname not in seen:
+            names.append(source.owner_nickname)
+            seen.add(source.owner_nickname)
+    return names
+
+
+def playable_track_count(session: ImportSessionResponse) -> int:
+    if session.progress:
+        return session.progress.sync.total
+    return len(session.playback.tracks) if session.playback else 0

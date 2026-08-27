@@ -174,10 +174,18 @@ a {
   margin: 0 auto;
   max-width: 760px;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   padding: 4px 0 14px;
   scrollbar-width: none;
   touch-action: pan-x;
   white-space: nowrap;
+}
+
+.stats-tabs {
+  justify-self: stretch;
+  min-width: 0;
+  width: 100%;
 }
 
 .flow-nav::-webkit-scrollbar,
@@ -354,6 +362,7 @@ p {
 }
 
 .preview-list,
+.history-list,
 .analytics-dashboard,
 .source-progress-list,
 .analytics-list,
@@ -367,6 +376,7 @@ p {
 }
 
 .preview-card,
+.history-card,
 .source-progress-row,
 .analytics-row,
 .rank-row {
@@ -386,6 +396,30 @@ p {
 
 .preview-card-error {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-row {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-card {
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.history-card span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.history-delete {
+  min-height: auto;
+  padding: 0 10px;
 }
 
 .preview-cover {
@@ -528,9 +562,66 @@ p {
 
 .analytics-card-fallback,
 .taste-pair,
-.permission-checklist-row {
+.permission-checklist-row,
+.analytics-detail-row,
+.analytics-detail-panel {
   display: grid;
   gap: 10px;
+}
+
+.analytics-detail-panel {
+  background: var(--panel-soft);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.analytics-detail-panel h4 {
+  color: var(--foreground);
+  font-size: 14px;
+  margin: 0;
+}
+
+.analytics-track-list-compact {
+  gap: 6px;
+  margin-left: 14px;
+  max-width: calc(100% - 14px);
+}
+
+.analytics-track-list-compact .analytics-row {
+  padding: 8px;
+}
+
+.analytics-track-list-compact .analytics-row strong {
+  font-size: 13px;
+}
+
+.analytics-track-artist {
+  color: var(--muted);
+  font-size: 0.86em;
+  font-weight: 500;
+}
+
+.analytics-track-list-compact .analytics-row p,
+.analytics-track-list-compact .analytics-row > span {
+  font-size: 11px;
+}
+
+.analytics-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.analytics-chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  font-size: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 5px 9px;
 }
 
 .analytics-subtle {

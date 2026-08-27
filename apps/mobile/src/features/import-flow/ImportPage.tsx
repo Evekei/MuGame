@@ -9,6 +9,7 @@ import {
   setImportFlowState,
   useImportFlowStore
 } from "./importFlowStore";
+import { ImportHistoryPanel } from "./ImportHistoryPanel";
 
 export function ImportPage() {
   const router = useRouter();
@@ -81,6 +82,7 @@ export function ImportPage() {
         ) : null}
         {status === "error" ? <p className="account-error">{message}</p> : null}
       </section>
+      <ImportHistoryPanel currentSessionId={flow.sessionId ?? flow.session?.id} />
     </main>
   );
 }

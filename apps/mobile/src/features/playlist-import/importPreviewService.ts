@@ -1,5 +1,6 @@
 import type {
   ConfirmedSourcePlaylist,
+  ImportHistoryItem,
   ImportSessionResponse,
   ImportPreviewResponse,
   MatchJobResponse,
@@ -56,6 +57,18 @@ export function getImportSession(
   sessionId: string
 ): Promise<ImportSessionResponse> {
   return api.getSession(sessionId);
+}
+
+export function getImportHistory(limit = 20): Promise<ImportHistoryItem[]> {
+  return api.getHistory(limit);
+}
+
+export function restoreTempPlaylist(sessionId: string): Promise<ImportSessionResponse> {
+  return api.restoreTempPlaylist(sessionId);
+}
+
+export function deleteImportSession(sessionId: string) {
+  return api.deleteImportSession(sessionId);
 }
 
 export function retryFullImport(sessionId: string): Promise<ImportSessionResponse> {

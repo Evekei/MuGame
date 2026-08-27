@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.account import router as account_router
 from app.api.health import router as health_router
+from app.api.import_history import router as import_history_router
 from app.api.import_matching import router as import_matching_router
 from app.api.imports import router as imports_router
 from app.api.temp_playlist import router as temp_playlist_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(account_router)
     app.include_router(health_router)
     app.include_router(imports_router)
+    app.include_router(import_history_router)
     app.include_router(import_matching_router)
     app.include_router(temp_playlist_router)
     app.include_router(tracks_router)

@@ -9,9 +9,11 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.ArrayList;
@@ -20,8 +22,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 final class NeteaseFloatingSourceWindow {
-    private static final int WIDTH_DP = 238;
-    private static final int MAX_HEIGHT_DP = 220;
+    private static final int WIDTH_DP = 156;
+    private static final int MAX_HEIGHT_DP = 216;
     private static final int BALL_SIZE_DP = 54;
 
     private final Context context;
@@ -38,6 +40,7 @@ final class NeteaseFloatingSourceWindow {
     private float touchStartY;
     private int windowStartX;
     private int windowStartY;
+    private boolean touchMoved;
 
     NeteaseFloatingSourceWindow(Context context) {
         this.context = context.getApplicationContext();
@@ -72,7 +75,7 @@ final class NeteaseFloatingSourceWindow {
             return;
         }
         List<String> displayLines = new ArrayList<>();
-        int maxLines = Math.min(lines.length(), 7);
+        int maxLines = Math.min(lines.length(), 5);
         for (int index = 0; index < maxLines; index++) {
             String line = safe(lines.optString(index));
             if (!line.isEmpty()) {
@@ -120,51 +123,78 @@ final class NeteaseFloatingSourceWindow {
     private View createExpandedView() {
         LinearLayout container = new LinearLayout(context);
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(dp(10), dp(8), dp(10), dp(8));
+        container.setPadding(dp(8), dp(8), dp(8), dp(8));
         container.setBackground(roundedBackground(Color.argb(235, 20, 20, 24), dp(10)));
 
         LinearLayout actions = new LinearLayout(context);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setOrientation(LinearLayout.VERTICAL);
 
         Button checkButton = new Button(context);
         checkButton.setText("Check");
         checkButton.setAllCaps(false);
+        styleCompactButton(checkButton);
         checkButton.setOnClickListener(_view -> revealCurrentSource());
-        actions.addView(checkButton, new LinearLayout.LayoutParams(0, dp(42), 1));
+        actions.addView(checkButton, new LinearLayout.LayoutParams(-1, dp(34)));
 
         Button statsButton = new Button(context);
         statsButton.setText("统计");
         statsButton.setAllCaps(false);
+        styleCompactButton(statsButton);
         statsButton.setOnClickListener(_view -> showAnalytics());
-        actions.addView(statsButton, new LinearLayout.LayoutParams(0, dp(42), 1));
+        LinearLayout.LayoutParams statsParams = new LinearLayout.LayoutParams(-1, dp(34));
+        statsParams.topMargin = dp(4);
+        actions.addView(statsButton, statsParams);
 
-        Button minimizeButton = new Button(context);
-        minimizeButton.setText("-");
-        minimizeButton.setAllCaps(false);
-        minimizeButton.setOnClickListener(_view -> applyMinimized(true));
-        actions.addView(minimizeButton, new LinearLayout.LayoutParams(dp(44), dp(42)));
-
-        container.addView(actions, new LinearLayout.LayoutParams(-1, dp(42)));
+        container.addView(actions, new LinearLayout.LayoutParams(-1, -2));
 
         statusText = new TextView(context);
         statusText.setText("点击 Check 查看来源");
         statusText.setTextColor(Color.WHITE);
-        statusText.setTextSize(13);
-        statusText.setMaxLines(7);
-        statusText.setPadding(0, dp(6), 0, 0);
-        container.addView(statusText, new LinearLayout.LayoutParams(-1, -2));
+        statusText.setTextSize(12);
+        statusText.setMaxLines(5);
+        statusText.setPadding(0, dp(4), 0, 0);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        statusParams.topMargin = dp(4);
+        container.addView(statusText, statusParams);
+
+        Button minimizeButton = new Button(context);
+        minimizeButton.setText("最小化");
+        minimizeButton.setAllCaps(false);
+        styleCompactButton(minimizeButton);
+        minimizeButton.setOnClickListener(_view -> applyMinimized(true));
+        LinearLayout.LayoutParams minimizeParams = new LinearLayout.LayoutParams(-1, dp(28));
+        minimizeParams.topMargin = dp(4);
+        container.addView(minimizeButton, minimizeParams);
         return container;
     }
 
+    private void styleCompactButton(Button button) {
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setPadding(0, 0, 0, 0);
+    }
+
     private View createBallView() {
-        TextView ball = new TextView(context);
-        ball.setText("MG");
-        ball.setGravity(Gravity.CENTER);
-        ball.setTextColor(Color.WHITE);
-        ball.setTextSize(14);
-        ball.setBackground(roundedBackground(Color.rgb(198, 38, 55), dp(BALL_SIZE_DP / 2)));
-        ball.setOnClickListener(_view -> applyMinimized(false));
+        ImageView ball = new ImageView(context);
+        ball.setImageResource(appIconResource());
+        ball.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        ball.setBackgroundColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            ball.setClipToOutline(true);
+            ball.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+            ball.setBackground(roundedBackground(Color.TRANSPARENT, dp(BALL_SIZE_DP / 2)));
+        }
+        ball.setOnTouchListener(this::dragWindow);
         return ball;
+    }
+
+    private int appIconResource() {
+        int roundIcon = context.getResources().getIdentifier(
+            "ic_launcher_round",
+            "mipmap",
+            context.getPackageName()
+        );
+        return roundIcon != 0 ? roundIcon : context.getApplicationInfo().icon;
     }
 
     private GradientDrawable roundedBackground(int color, int radiusPx) {
@@ -246,21 +276,30 @@ final class NeteaseFloatingSourceWindow {
                 touchStartY = event.getRawY();
                 windowStartX = layoutParams.x;
                 windowStartY = layoutParams.y;
-                return false;
+                touchMoved = false;
+                return minimized;
             case MotionEvent.ACTION_MOVE:
+                if (
+                    Math.abs(event.getRawX() - touchStartX) < dp(6) &&
+                    Math.abs(event.getRawY() - touchStartY) < dp(6)
+                ) {
+                    return minimized;
+                }
+                touchMoved = true;
                 layoutParams.x = windowStartX - (int) (event.getRawX() - touchStartX);
                 layoutParams.y = windowStartY + (int) (event.getRawY() - touchStartY);
                 windowManager.updateViewLayout(rootView, layoutParams);
                 return true;
             case MotionEvent.ACTION_UP:
                 wasTap =
+                    !touchMoved &&
                     Math.abs(event.getRawX() - touchStartX) < dp(6) &&
                     Math.abs(event.getRawY() - touchStartY) < dp(6);
                 if (minimized && wasTap) {
                     applyMinimized(false);
                     return true;
                 }
-                return false;
+                return minimized;
             default:
                 return false;
         }

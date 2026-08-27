@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 import time
 
 from fastapi.testclient import TestClient
@@ -253,6 +254,96 @@ def test_orchestration_api_starts_and_reads_ready_session(tmp_path: Path):
     assert ready["matched_tracks"][0]["contributors"][0]["owner_nickname"] == "Alice"
 
 
+def test_import_history_lists_ready_sessions_in_recent_order(tmp_path: Path):
+    orchestrator, import_repo, _mapping_repo, _adapter = orchestrator_fixture(tmp_path)
+
+    first = orchestrator.start(
+        FullImportRequest(source_playlists=[source_playlist("101", "owner-a", "Alice")])
+    )
+    poll_session(import_repo, first.id, "ready_to_play")
+    second = orchestrator.start(
+        FullImportRequest(source_playlists=[source_playlist("202", "owner-b", "Bob")])
+    )
+    poll_session(import_repo, second.id, "ready_to_play")
+    third = orchestrator.start(
+        FullImportRequest(source_playlists=[source_playlist("303", "owner-c", "Cara")])
+    )
+    poll_session(import_repo, third.id, "ready_to_play")
+    import_repo.create_session(
+        "pending-session",
+        [source_playlist("404", "owner-d", "Dana")],
+    )
+
+    history = import_repo.list_history(limit=2)
+
+    assert [item.session_id for item in history] == [third.id, second.id]
+    assert history[0].temp_playlist_id == "temp-1"
+    assert history[0].playable_track_count == 1
+    assert history[0].owner_nicknames == ["Cara"]
+
+
+def test_restore_history_resyncs_temp_playlist_without_new_analytics(
+    tmp_path: Path,
+):
+    orchestrator, import_repo, _mapping_repo, adapter = orchestrator_fixture(tmp_path)
+    session = orchestrator.start(
+        FullImportRequest(source_playlists=[source_playlist("101", "owner-a", "Alice")])
+    )
+    ready = poll_session(import_repo, session.id, "ready_to_play")
+    adapter.tracks = ["stale-song"]
+    orchestrator.full_import_service.run_import = fail_if_called
+    orchestrator.matching_service.match_tracks = fail_if_called
+
+    restored = orchestrator.restore_temp_playlist(session.id)
+
+    assert restored.status == "ready_to_play"
+    assert restored.analytics_job_id == ready.analytics_job_id
+    assert adapter.tracks == shuffled_playback_order(["101"], session.id)
+    assert restored.playback is not None
+    assert restored.playback.tracks[0].contributors[0].owner_nickname == "Alice"
+
+
+def test_import_history_api_restores_and_deletes_session(tmp_path: Path):
+    orchestrator, import_repo, _mapping_repo, adapter = orchestrator_fixture(tmp_path)
+    session = orchestrator.start(
+        FullImportRequest(source_playlists=[source_playlist("101", "owner-a", "Alice")])
+    )
+    poll_session(import_repo, session.id, "ready_to_play")
+    app = create_app()
+    app.dependency_overrides[get_import_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_import_repository] = lambda: import_repo
+
+    try:
+        client = TestClient(app)
+        history_response = client.get("/imports/history?limit=20")
+        adapter.tracks = ["current-song"]
+        restore_response = client.post(
+            f"/imports/sessions/{session.id}/restore-temp-playlist"
+        )
+        delete_response = client.delete(f"/imports/sessions/{session.id}")
+        deleted_get_response = client.get(f"/imports/sessions/{session.id}")
+        deleted_history_response = client.get("/imports/history")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert history_response.status_code == 200
+    assert history_response.json()[0]["session_id"] == session.id
+    assert restore_response.status_code == 200
+    assert restore_response.json()["status"] == "ready_to_play"
+    assert adapter.tracks == shuffled_playback_order(["101"], session.id)
+    assert delete_response.json() == {"session_id": session.id, "deleted": True}
+    assert deleted_get_response.status_code == 404
+    assert deleted_history_response.json() == []
+    assert import_table_counts(tmp_path / "mugame.sqlite3", session.id) == {
+        "analytics_jobs": 0,
+        "analytics_results": 0,
+        "import_orchestrations": 0,
+        "orchestration_matched_tracks": 0,
+        "source_playlists": 0,
+        "source_tracks": 0,
+    }
+
+
 def orchestrator_fixture(
     tmp_path: Path,
     platform: str = "netease",
@@ -352,6 +443,10 @@ def source_playlist_payload(
     }
 
 
+def fail_if_called(*_args, **_kwargs):
+    raise AssertionError("Restore must reuse stored import and matching results.")
+
+
 def progress_counts(import_repo: ImportRepository, session_id: str):
     progress = import_repo.get_session(session_id).progress
     return (
@@ -366,6 +461,33 @@ def assert_progress_monotonic(snapshots: list[tuple[int, int, int]]) -> None:
         assert current[0] >= previous[0]
         assert current[1] >= previous[1]
         assert current[2] >= previous[2]
+
+
+def import_table_counts(database_path: Path, session_id: str) -> dict[str, int]:
+    tables = [
+        "analytics_jobs",
+        "analytics_results",
+        "import_orchestrations",
+        "orchestration_matched_tracks",
+        "source_playlists",
+        "source_tracks",
+    ]
+    with sqlite3.connect(database_path) as connection:
+        return {
+            table: connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE {session_column(table)} = ?",
+                (session_id,),
+            ).fetchone()[0]
+            for table in tables
+        }
+
+
+def session_column(table: str) -> str:
+    if table in {"analytics_jobs", "analytics_results"}:
+        return "import_session_id"
+    if table == "import_orchestrations":
+        return "session_id"
+    return "session_id" if table == "orchestration_matched_tracks" else "import_session_id"
 
 
 def poll_session(import_repo, session_id: str, status: str):

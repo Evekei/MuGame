@@ -30,8 +30,8 @@ def compute_analytics_v1(session: ImportSessionResponse) -> dict[str, dict[str, 
       track_jaccard and artist_jaccard and include both component scores.
     """
     context = build_context(session)
-    pairwise_tracks = pairwise_similarity(context.owner_tracks, context.owners)
-    pairwise_artists = pairwise_similarity(context.owner_artists, context.owners)
+    pairwise_tracks = pairwise_track_similarity(context)
+    pairwise_artists = pairwise_artist_similarity(context)
     pair_extremes = pair_extreme_payloads(pairwise_tracks, pairwise_artists)
 
     return {
@@ -58,6 +58,7 @@ class AnalyticsContext:
         self.artist_owners: dict[str, set[str]] = defaultdict(set)
         self.artist_tracks: dict[str, set[str]] = defaultdict(set)
         self.artist_display: dict[str, str] = {}
+        self.tracks: dict[str, MatchedTrackItem] = {}
 
 
 def build_context(session: ImportSessionResponse) -> AnalyticsContext:
@@ -68,6 +69,7 @@ def build_context(session: ImportSessionResponse) -> AnalyticsContext:
         owner["source_playlist_ids"].add(source.source_playlist_id)
 
     for track in session.matched_tracks:
+        context.tracks[track.id] = track
         owners = unique_track_owners(track.contributors)
         for owner_id, contributor in owners.items():
             ensure_owner(context, owner_id, contributor.owner_nickname)
@@ -151,23 +153,41 @@ def top_shared_tracks(
     )
 
 
-def pairwise_similarity(
-    owner_sets: dict[str, set[str]],
-    owners: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
+def pairwise_track_similarity(context: AnalyticsContext) -> list[dict[str, Any]]:
     pairs = []
-    for owner_a, owner_b in combinations(sorted(owners), 2):
-        values_a = owner_sets.get(owner_a, set())
-        values_b = owner_sets.get(owner_b, set())
-        intersection = len(values_a & values_b)
+    for owner_a, owner_b in combinations(sorted(context.owners), 2):
+        values_a = context.owner_tracks.get(owner_a, set())
+        values_b = context.owner_tracks.get(owner_b, set())
+        shared_ids = values_a & values_b
         union = len(values_a | values_b)
         pairs.append(
             {
-                "owner_a": owner_identity_for_pair(owners, owner_a),
-                "owner_b": owner_identity_for_pair(owners, owner_b),
-                "intersection": intersection,
+                "owner_a": owner_identity_for_pair(context.owners, owner_a),
+                "owner_b": owner_identity_for_pair(context.owners, owner_b),
+                "intersection": len(shared_ids),
                 "union": union,
-                "jaccard": ratio(intersection, union),
+                "jaccard": ratio(len(shared_ids), union),
+                "shared_tracks": tracks_payload(shared_ids, context),
+            }
+        )
+    return pairs
+
+
+def pairwise_artist_similarity(context: AnalyticsContext) -> list[dict[str, Any]]:
+    pairs = []
+    for owner_a, owner_b in combinations(sorted(context.owners), 2):
+        values_a = context.owner_artists.get(owner_a, set())
+        values_b = context.owner_artists.get(owner_b, set())
+        shared_artists = values_a & values_b
+        union = len(values_a | values_b)
+        pairs.append(
+            {
+                "owner_a": owner_identity_for_pair(context.owners, owner_a),
+                "owner_b": owner_identity_for_pair(context.owners, owner_b),
+                "intersection": len(shared_artists),
+                "union": union,
+                "jaccard": ratio(len(shared_artists), union),
+                "shared_artists": artist_names(shared_artists, context),
             }
         )
     return pairs
@@ -180,6 +200,7 @@ def top_artists_payload(context: AnalyticsContext) -> list[dict[str, Any]]:
             "artist_key": artist_key,
             "unique_track_count": len(context.artist_tracks[artist_key]),
             "participant_count": len(context.artist_owners[artist_key]),
+            "tracks": tracks_payload(context.artist_tracks[artist_key], context),
         }
         for artist_key in context.artist_tracks
     ]
@@ -206,12 +227,46 @@ def unique_taste_payload(context: AnalyticsContext) -> list[dict[str, Any]]:
                 "total_track_count": len(tracks),
                 "exclusive_track_count": len(exclusive_tracks),
                 "exclusive_track_ratio": ratio(len(exclusive_tracks), len(tracks)),
+                "exclusive_tracks": tracks_payload(exclusive_tracks, context),
                 "total_artist_count": len(artists),
                 "exclusive_artist_count": len(exclusive_artists),
                 "exclusive_artist_ratio": ratio(len(exclusive_artists), len(artists)),
+                "exclusive_artists": artist_names(exclusive_artists, context),
             }
         )
     return rows
+
+
+def tracks_payload(track_ids: set[str], context: AnalyticsContext) -> list[dict[str, Any]]:
+    return [
+        track_payload(context.tracks[track_id], context.owner_lookup)
+        for track_id in sorted(
+            track_ids,
+            key=lambda track_id: (
+                context.tracks[track_id].display_title,
+                track_id,
+            ),
+        )
+        if track_id in context.tracks
+    ]
+
+
+def track_payload(
+    track: MatchedTrackItem,
+    owner_lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    owner_ids = sorted(unique_track_owners(track.contributors))
+    return {
+        "track_id": track.id,
+        "display_title": track.display_title,
+        "artists": track.artists,
+        "contributor_count": len(owner_ids),
+        "contributors": [owner_lookup[owner_id] for owner_id in owner_ids],
+    }
+
+
+def artist_names(artist_keys: set[str], context: AnalyticsContext) -> list[str]:
+    return [context.artist_display[key] for key in sorted(artist_keys)]
 
 
 def pair_extreme_payloads(
