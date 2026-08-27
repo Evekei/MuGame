@@ -6,6 +6,7 @@ import type {
   PlaylistPreviewItem
 } from "@mugame/contracts/imports";
 import { useSyncExternalStore } from "react";
+import { saveLocalImportSession } from "./localImportSessionRepository";
 
 export interface ReadyToPlayPayload {
   tempPlaylistId: string;
@@ -117,6 +118,7 @@ export function setImportFlowState(
 
 export function setStoredImportSession(session: ImportSessionResponse) {
   const nextReadyPayload = readyPayloadFromSession(session);
+  void saveLocalImportSession(session).catch(() => undefined);
   setImportFlowState((current) => ({
     ...current,
     readyPayload: stableReadyPayload(current.readyPayload, nextReadyPayload),

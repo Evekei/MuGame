@@ -4,6 +4,11 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class KnownTempPlaylistSyncRequest(BaseModel):
+    import_session_id: str
+    netease_song_ids: list[str]
+
+
 class TempPlaylistBatchResult(BaseModel):
     operation: Literal["add", "remove"]
     start_index: int

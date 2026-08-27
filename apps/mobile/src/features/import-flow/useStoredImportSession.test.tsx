@@ -82,6 +82,7 @@ function mockApi(overrides = {}) {
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreKnownTempPlaylist: vi.fn(),
     restoreTempPlaylist: vi.fn(),
     startFullImport: vi.fn(),
     startMatchJob: vi.fn(),

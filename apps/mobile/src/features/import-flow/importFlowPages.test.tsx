@@ -44,6 +44,7 @@ vi.mock("@/features/player/PlayerPage", () => ({
 
 describe("import flow pages", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     push.mockClear();
     replace.mockClear();
     resetImportFlowState();
@@ -114,9 +115,9 @@ describe("import flow pages", () => {
     render(<ImportPage />);
     await user.click(await screen.findByRole("button", { name: "删除" }));
 
-    await waitFor(() => expect(deleteImportSession).toHaveBeenCalledWith("history-session"));
+    await waitFor(() => expect(screen.getByText("暂无临时歌单历史。")).toBeInTheDocument());
+    expect(deleteImportSession).not.toHaveBeenCalled();
     expect(restoreTempPlaylist).not.toHaveBeenCalled();
-    expect(screen.getByText("暂无临时歌单历史。")).toBeInTheDocument();
     expect(getImportFlowState().sessionId).toBeUndefined();
     expect(getImportFlowState().readyPayload).toBeUndefined();
   });
@@ -273,6 +274,7 @@ function mockApi(overrides = {}) {
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreKnownTempPlaylist: vi.fn(),
     restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),

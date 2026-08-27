@@ -7,7 +7,10 @@ from app.integrations.netease.temp_playlist import NeteaseTempPlaylistAdapter
 from app.repositories.account_session_repository import AccountSessionRepository
 from app.repositories.import_repository import ImportRepository
 from app.repositories.track_mapping_repository import TrackMappingRepository
-from app.schemas.temp_playlist import TempPlaylistSyncResponse
+from app.schemas.temp_playlist import (
+    KnownTempPlaylistSyncRequest,
+    TempPlaylistSyncResponse,
+)
 from app.services.temp_playlist import TempPlaylistService
 
 router = APIRouter(prefix="/imports", tags=["temp-playlist"])
@@ -46,3 +49,17 @@ def sync_import_session_temp_playlist(
         return service.sync(session_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Import session not found.") from error
+
+
+@router.post(
+    "/temp-playlist/sync-known",
+    response_model=TempPlaylistSyncResponse,
+)
+def sync_known_temp_playlist(
+    request: KnownTempPlaylistSyncRequest,
+    service: TempPlaylistService = Depends(get_temp_playlist_service),
+) -> TempPlaylistSyncResponse:
+    return service.sync_known_netease_song_ids(
+        request.import_session_id,
+        request.netease_song_ids,
+    )

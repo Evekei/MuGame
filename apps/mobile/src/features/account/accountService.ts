@@ -68,6 +68,13 @@ export async function loginNetease() {
 export async function syncNeteaseAccount() {
   try {
     const session = await dependencies.api.readSession();
+    if (session.status === "logged_out") {
+      const restored = await restoreBackendSessionFromNativeBridge();
+      if (restored) {
+        applySessionResponse(restored);
+        return;
+      }
+    }
     applySessionResponse(session);
   } catch (error) {
     setAccountState(toErrorState(error, "同步登录状态失败"));
@@ -172,6 +179,18 @@ async function closeLoginSafely() {
     await dependencies.bridge.closeLogin();
   } catch {
     // Closing the native login sheet is best-effort after a terminal state.
+  }
+}
+
+async function restoreBackendSessionFromNativeBridge() {
+  if (!Capacitor.isNativePlatform()) {
+    return undefined;
+  }
+  try {
+    const snapshot = await dependencies.bridge.readSession();
+    return await dependencies.api.saveSession(snapshot);
+  } catch {
+    return undefined;
   }
 }
 

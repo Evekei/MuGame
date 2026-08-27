@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Capacitor } from "@capacitor/core";
 import type { AccountApi } from "./accountApi";
 import {
   bootstrapAccountSession,
@@ -54,6 +55,7 @@ function createFakes() {
 
 describe("accountService", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     resetAccountState();
     resetAccountServiceDependencies();
   });
@@ -115,6 +117,24 @@ describe("accountService", () => {
     expect(getAccountState()).toMatchObject({
       status: "expired",
       errorMessage: "登录已过期，请重新登录。"
+    });
+  });
+
+  it("restores backend session from native bridge when server is stateless", async () => {
+    const { api, bridge } = createFakes();
+    vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
+    vi.mocked(api.readSession).mockResolvedValue({
+      status: "logged_out",
+      checked_at: "2026-08-23T00:00:00.000Z"
+    });
+
+    await syncNeteaseAccount();
+
+    expect(bridge.readSession).toHaveBeenCalledOnce();
+    expect(api.saveSession).toHaveBeenCalledWith(sessionSnapshot);
+    expect(getAccountState()).toMatchObject({
+      status: "logged_in",
+      profile: { userId: "42", nickname: "Netease Alice" }
     });
   });
 

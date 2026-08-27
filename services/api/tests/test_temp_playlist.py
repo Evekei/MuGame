@@ -173,6 +173,24 @@ def test_temp_playlist_sync_caps_netease_batches_at_two_hundred(tmp_path: Path) 
     assert [len(batch) for batch in adapter.add_batches] == [200, 50]
 
 
+def test_temp_playlist_sync_known_song_ids_does_not_need_import_session(
+    tmp_path: Path,
+) -> None:
+    service, adapter, _import_repo, _mapping_repo, _session_id = sync_fixture(tmp_path)
+
+    response = service.sync_known_netease_song_ids(
+        "local-history-1",
+        ["202", "101", "202", ""],
+    )
+
+    expected_ids = shuffled_playback_order(["202", "101"], "local-history-1")
+    assert response.status == "ready"
+    assert response.import_session_id == "local-history-1"
+    assert response.synced_count == 2
+    assert response.skipped_count == 0
+    assert adapter.tracks == expected_ids
+
+
 def test_temp_playlist_sync_api_returns_auth_expired(tmp_path: Path) -> None:
     service, _adapter, _import_repo, _mapping_repo, session_id = sync_fixture(
         tmp_path,
@@ -189,6 +207,30 @@ def test_temp_playlist_sync_api_returns_auth_expired(tmp_path: Path) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTH_EXPIRED"
+
+
+def test_temp_playlist_sync_known_api_rewrites_from_request_ids(
+    tmp_path: Path,
+) -> None:
+    service, adapter, _import_repo, _mapping_repo, _session_id = sync_fixture(tmp_path)
+    app = create_app()
+    app.dependency_overrides[get_temp_playlist_service] = lambda: service
+
+    try:
+        response = TestClient(app).post(
+            "/imports/temp-playlist/sync-known",
+            json={
+                "import_session_id": "local-history-1",
+                "netease_song_ids": ["101", "202"],
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert adapter.tracks == shuffled_playback_order(["101", "202"], "local-history-1")
+
 
 def test_temp_playlist_sync_api_returns_sync_failed(tmp_path: Path) -> None:
     service, adapter, _import_repo, _mapping_repo, session_id = sync_fixture(tmp_path)

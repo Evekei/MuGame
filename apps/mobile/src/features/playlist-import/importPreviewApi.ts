@@ -5,6 +5,7 @@ import type {
   ImportSessionResponse,
   ImportPreviewRequest,
   ImportPreviewResponse,
+  KnownTempPlaylistSyncRequest,
   MatchJobResponse,
   ManualMatchConfirmRequest,
   MatchedTrackItem,
@@ -26,6 +27,9 @@ export interface ImportPreviewApi {
   preview: (request: ImportPreviewRequest) => Promise<ImportPreviewResponse>;
   retryAnalytics: (sessionId: string) => Promise<ImportSessionResponse>;
   retryFullImport: (sessionId: string) => Promise<ImportSessionResponse>;
+  restoreKnownTempPlaylist: (
+    request: KnownTempPlaylistSyncRequest
+  ) => Promise<TempPlaylistSyncResponse>;
   restoreTempPlaylist: (sessionId: string) => Promise<ImportSessionResponse>;
   startMatchJob: (sessionId: string) => Promise<MatchJobResponse>;
   startFullImport: (request: FullImportRequest) => Promise<ImportSessionResponse>;
@@ -56,6 +60,8 @@ export const importPreviewApi: ImportPreviewApi = {
     ),
   retryFullImport: (sessionId) =>
     postJson<ImportSessionResponse>(`/imports/sessions/${sessionId}/retry`, {}),
+  restoreKnownTempPlaylist: (request) =>
+    postJson<TempPlaylistSyncResponse>("/imports/temp-playlist/sync-known", request),
   restoreTempPlaylist: (sessionId) =>
     postJson<ImportSessionResponse>(
       `/imports/sessions/${sessionId}/restore-temp-playlist`,

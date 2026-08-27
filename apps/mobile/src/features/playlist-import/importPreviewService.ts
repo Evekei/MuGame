@@ -1,6 +1,7 @@
 import type {
   ConfirmedSourcePlaylist,
   ImportHistoryItem,
+  ImportSessionDeleteResponse,
   ImportSessionResponse,
   ImportPreviewResponse,
   MatchJobResponse,
@@ -14,6 +15,16 @@ import {
   importPreviewApi,
   type ImportPreviewApi
 } from "./importPreviewApi";
+import { ApiClientError } from "@/lib/api/client";
+import {
+  deleteLocalImportSession,
+  listLocalImportHistory,
+  localPlaybackSongIds,
+  readLocalImportSession,
+  saveLocalImportSession,
+  sessionWithTempPlaylistSync,
+  usesNativeSqlite
+} from "@/features/import-flow/localImportSessionRepository";
 
 let api: ImportPreviewApi = importPreviewApi;
 
@@ -56,18 +67,57 @@ export function startImportOrchestration(
 export function getImportSession(
   sessionId: string
 ): Promise<ImportSessionResponse> {
-  return api.getSession(sessionId);
+  return api.getSession(sessionId).catch(async (error) => {
+    const localSession = await readLocalImportSession(sessionId);
+    if (!localSession) {
+      throw error;
+    }
+    return localSession;
+  });
 }
 
-export function getImportHistory(limit = 20): Promise<ImportHistoryItem[]> {
+export async function getImportHistory(limit = 20): Promise<ImportHistoryItem[]> {
+  const localHistory = await listLocalImportHistory(limit);
+  if (usesNativeSqlite() || localHistory.length > 0) {
+    return localHistory;
+  }
   return api.getHistory(limit);
 }
 
-export function restoreTempPlaylist(sessionId: string): Promise<ImportSessionResponse> {
-  return api.restoreTempPlaylist(sessionId);
+export async function restoreTempPlaylist(
+  sessionId: string
+): Promise<ImportSessionResponse> {
+  const localSession = await readLocalImportSession(sessionId);
+  if (!localSession) {
+    return api.restoreTempPlaylist(sessionId);
+  }
+
+  const songIds = localPlaybackSongIds(localSession);
+  if (songIds.length === 0) {
+    throw new ApiClientError(
+      "本地历史没有可播放的网易云歌曲。",
+      409,
+      "LOCAL_HISTORY_NOT_PLAYABLE"
+    );
+  }
+
+  const sync = await api.restoreKnownTempPlaylist({
+    import_session_id: sessionId,
+    netease_song_ids: songIds
+  });
+  const restoredSession = sessionWithTempPlaylistSync(localSession, sync);
+  await saveLocalImportSession(restoredSession);
+  return restoredSession;
 }
 
-export function deleteImportSession(sessionId: string) {
+export async function deleteImportSession(
+  sessionId: string
+): Promise<ImportSessionDeleteResponse> {
+  const localSession = await readLocalImportSession(sessionId);
+  if (usesNativeSqlite() || localSession) {
+    await deleteLocalImportSession(sessionId);
+    return { deleted: true, session_id: sessionId };
+  }
   return api.deleteImportSession(sessionId);
 }
 

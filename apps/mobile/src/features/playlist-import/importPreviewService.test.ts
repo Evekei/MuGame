@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  readLocalImportSession,
+  saveLocalImportSession,
+  sessionWithTempPlaylistSync
+} from "@/features/import-flow/localImportSessionRepository";
+import {
   configureImportPreviewService,
   deleteImportSession,
   getImportHistory,
@@ -17,6 +22,7 @@ import {
 
 describe("importPreviewService", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     resetImportPreviewService();
   });
 
@@ -222,6 +228,17 @@ describe("importPreviewService", () => {
     expect(getHistoryApi).toHaveBeenCalledWith(10);
   });
 
+  it("reads local history before the API when a ready session is saved", async () => {
+    const getHistoryApi = vi.fn();
+    configureImportPreviewService(mockApi({ getHistory: getHistoryApi }));
+    await saveLocalImportSession(readySession());
+
+    const history = await getImportHistory(10);
+
+    expect(getHistoryApi).not.toHaveBeenCalled();
+    expect(history[0]?.session_id).toBe("session-1");
+  });
+
   it("restores a historical temp playlist through the API layer", async () => {
     const restoreTempPlaylistApi = vi.fn().mockResolvedValue({ id: "session-1" });
     configureImportPreviewService(
@@ -231,6 +248,44 @@ describe("importPreviewService", () => {
     await restoreTempPlaylist("session-1");
 
     expect(restoreTempPlaylistApi).toHaveBeenCalledWith("session-1");
+  });
+
+  it("restores local history by syncing known NetEase song ids", async () => {
+    const restoreKnownTempPlaylist = vi.fn().mockResolvedValue({
+      batches: [],
+      failed_count: 0,
+      import_session_id: "session-1",
+      ready_at: "2026-08-28T00:00:00Z",
+      skipped_count: 0,
+      status: "ready",
+      synced_count: 1,
+      temp_playlist_id: "temp-2"
+    });
+    const restoreTempPlaylistApi = vi.fn();
+    configureImportPreviewService(
+      mockApi({ restoreKnownTempPlaylist, restoreTempPlaylist: restoreTempPlaylistApi })
+    );
+    await saveLocalImportSession(readySession());
+
+    const restored = await restoreTempPlaylist("session-1");
+
+    expect(restoreTempPlaylistApi).not.toHaveBeenCalled();
+    expect(restoreKnownTempPlaylist).toHaveBeenCalledWith({
+      import_session_id: "session-1",
+      netease_song_ids: ["song-1"]
+    });
+    expect(restored).toEqual(
+      sessionWithTempPlaylistSync(readySession(), {
+        batches: [],
+        failed_count: 0,
+        import_session_id: "session-1",
+        ready_at: "2026-08-28T00:00:00Z",
+        skipped_count: 0,
+        status: "ready",
+        synced_count: 1,
+        temp_playlist_id: "temp-2"
+      })
+    );
   });
 
   it("deletes an import session through the API layer", async () => {
@@ -246,6 +301,17 @@ describe("importPreviewService", () => {
 
     expect(deleteImportSessionApi).toHaveBeenCalledWith("session-1");
   });
+
+  it("deletes local history without calling the server", async () => {
+    const deleteImportSessionApi = vi.fn();
+    configureImportPreviewService(mockApi({ deleteImportSession: deleteImportSessionApi }));
+    await saveLocalImportSession(readySession());
+
+    await deleteImportSession("session-1");
+
+    expect(deleteImportSessionApi).not.toHaveBeenCalled();
+    expect(await readLocalImportSession("session-1")).toBeUndefined();
+  });
 });
 
 function mockApi(overrides = {}) {
@@ -259,12 +325,62 @@ function mockApi(overrides = {}) {
     preview: vi.fn(),
     retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
+    restoreKnownTempPlaylist: vi.fn(),
     restoreTempPlaylist: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
     startOrchestration: vi.fn(),
     syncTempPlaylist: vi.fn(),
     ...overrides
+  };
+}
+
+function readySession() {
+  return {
+    id: "session-1",
+    status: "ready_to_play" as const,
+    raw_track_count: 1,
+    source_playlists: [
+      {
+        ...readyPreviewItem(),
+        id: "source-1",
+        read_count: 1,
+        status: "ready" as const
+      }
+    ],
+    tracks: [],
+    created_at: "2026-08-27T00:00:00Z",
+    updated_at: "2026-08-27T00:00:00Z",
+    analytics_results: [],
+    matched_tracks: [matchedTrack()],
+    playback: {
+      temp_playlist_id: "temp-1",
+      tracks: [matchedTrack()]
+    },
+    ready_to_play_at: "2026-08-27T00:00:00Z",
+    temp_playlist_id: "temp-1"
+  };
+}
+
+function matchedTrack() {
+  return {
+    id: "track-1",
+    display_title: "夜曲",
+    artists: ["周杰伦"],
+    source_track_ids: ["netease:song-1"],
+    contributors: [
+      {
+        platform: "netease" as const,
+        source_playlist_id: "1",
+        owner_source_id: "owner-a",
+        owner_nickname: "Alice"
+      }
+    ],
+    match_status: "auto_accepted" as const,
+    netease_song_id: "song-1",
+    match_confidence: 1,
+    match_reason: "test",
+    candidates: []
   };
 }
 

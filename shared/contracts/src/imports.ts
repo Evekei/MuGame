@@ -300,3 +300,8 @@ export interface TempPlaylistSyncResponse {
   batches: TempPlaylistBatchResult[];
   error?: string;
 }
+
+export interface KnownTempPlaylistSyncRequest {
+  import_session_id: string;
+  netease_song_ids: string[];
+}

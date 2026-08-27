@@ -69,6 +69,33 @@ class TempPlaylistService:
         except NeteasePlaylistSyncFailed as error:
             raise sync_failed_error(str(error)) from error
 
+    def sync_known_netease_song_ids(
+        self, import_session_id: str, netease_song_ids: list[str]
+    ) -> TempPlaylistSyncResponse:
+        record = self.account_repository.get_netease_session()
+        if record is None:
+            raise auth_expired_error()
+
+        target_ids = shuffled_playback_order(
+            unique_song_ids(netease_song_ids),
+            import_session_id,
+        )
+        adapter = self.adapter_factory(record)
+
+        try:
+            playlist_id = ensure_temp_playlist(adapter, self.playlist_name)
+            return self._replace_playlist(
+                import_session_id,
+                adapter,
+                playlist_id,
+                target_ids,
+                0,
+            )
+        except NeteaseAuthExpired as error:
+            raise auth_expired_error() from error
+        except NeteasePlaylistSyncFailed as error:
+            raise sync_failed_error(str(error)) from error
+
     def _replace_playlist(
         self,
         import_session_id: str,
@@ -142,6 +169,18 @@ def shuffled_playback_order(track_ids: list[str], seed: str) -> list[str]:
         offset = int(sha256(seed.encode()).hexdigest(), 16) % (len(shuffled) - 1) + 1
         return shuffled[offset:] + shuffled[:offset]
     return shuffled
+
+
+def unique_song_ids(song_ids: list[str]) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for song_id in song_ids:
+        normalized_id = str(song_id).strip()
+        if not normalized_id or normalized_id in seen:
+            continue
+        ids.append(normalized_id)
+        seen.add(normalized_id)
+    return ids
 
 
 def playable_id_for_track(
