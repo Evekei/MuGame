@@ -27,6 +27,7 @@ class FakeTempPlaylistAdapter:
         self.fail_add_calls = 0
         self.fail_add_forever = False
         self.fail_find = False
+        self.add_batches: list[list[str]] = []
 
     def find_playlist_by_name(self, name: str) -> str | None:
         if self.fail_find:
@@ -45,6 +46,7 @@ class FakeTempPlaylistAdapter:
         self.tracks = [track_id for track_id in self.tracks if track_id not in track_ids]
 
     def add_tracks(self, _playlist_id: str, track_ids: list[str]) -> None:
+        self.add_batches.append(list(track_ids))
         if self.fail_add_forever or self.fail_add_calls > 0:
             self.fail_add_calls -= 1
 
@@ -150,6 +152,25 @@ def test_temp_playlist_playback_order_is_shuffled_and_stable() -> None:
     assert first != ids
     assert sorted(first) == sorted(ids)
     assert ids == ["101", "202", "303", "404", "505"]
+
+
+def test_temp_playlist_sync_caps_netease_batches_at_twenty(tmp_path: Path) -> None:
+    service, adapter, import_repo, _mapping_repo, session_id = sync_fixture(
+        tmp_path,
+        batch_size=200,
+    )
+    source = import_repo.list_sources(session_id)[0]
+    import_repo.save_source_tracks(
+        session_id,
+        source,
+        [track("netease", str(1000 + index), f"Song {index}", "Alice") for index in range(45)],
+    )
+
+    response = service.sync(session_id)
+
+    assert response.status == "ready"
+    assert response.synced_count == 45
+    assert [len(batch) for batch in adapter.add_batches] == [20, 20, 5]
 
 
 def test_temp_playlist_sync_api_returns_auth_expired(tmp_path: Path) -> None:

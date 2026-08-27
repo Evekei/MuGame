@@ -1,7 +1,11 @@
-import type { MatchedTrackItem } from "@mugame/contracts/imports";
+import type { ImportSessionResponse, MatchedTrackItem } from "@mugame/contracts/imports";
 import { describe, expect, it, vi } from "vitest";
 import type { NeteasePlayerBridge } from "@/bridges/NeteasePlayerBridge";
-import { NeteasePlayerService, toPlayableTracks } from "./NeteasePlayerService";
+import {
+  NeteasePlayerService,
+  toFloatingAnalyticsSummary,
+  toPlayableTracks
+} from "./NeteasePlayerService";
 
 describe("NeteasePlayerService", () => {
   it("builds playable metadata from matched NetEase tracks only", () => {
@@ -31,6 +35,31 @@ describe("NeteasePlayerService", () => {
       ]
     });
     expect(bridge.loadPlaylist).toHaveBeenCalledWith({ netease_playlist_id: "temp-1" });
+  });
+
+  it("updates floating analytics without reopening playback", async () => {
+    const bridge = createBridge();
+    const service = new NeteasePlayerService({ bridge });
+    const summary = toFloatingAnalyticsSummary(analyticsSession());
+
+    service.startSession([matched("1")], { tempPlaylistId: "temp-1" });
+    await service.configureAnalytics(summary);
+
+    expect(bridge.configureSourceReveal).toHaveBeenCalledWith({
+      analytics: summary,
+      tracks: [expect.objectContaining({ netease_song_id: "song-1" })]
+    });
+    expect(bridge.loadPlaylist).not.toHaveBeenCalled();
+  });
+
+  it("summarizes analytics for the floating window", () => {
+    expect(toFloatingAnalyticsSummary(analyticsSession()).lines).toEqual([
+      "统计概览",
+      "参与 2 人，共 5 首",
+      "去重 4 首，共同 1 首",
+      "共鸣歌曲：共同歌曲",
+      "Top 歌手：Artist A"
+    ]);
   });
 
   it("opens NetEase playback and tears down the bridge", async () => {
@@ -85,6 +114,45 @@ function createBridge(): NeteasePlayerBridge {
     openPlaylistAutoplaySettings: vi.fn().mockResolvedValue(undefined),
     openPlaybackMonitorSettings: vi.fn().mockResolvedValue(undefined),
     play: vi.fn().mockResolvedValue(undefined)
+  };
+}
+
+function analyticsSession(): ImportSessionResponse {
+  return {
+    id: "session-1",
+    status: "ready_to_play",
+    raw_track_count: 5,
+    source_playlists: [],
+    tracks: [],
+    created_at: "2026-08-27T00:00:00Z",
+    updated_at: "2026-08-27T00:00:00Z",
+    analytics_results: [
+      {
+        metric_key: "overview",
+        payload: {
+          participant_count: 2,
+          raw_track_count: 5,
+          unique_track_count: 4,
+          shared_track_count: 1
+        },
+        status: "completed",
+        computed_at: "2026-08-27T00:00:00Z"
+      },
+      {
+        metric_key: "top_shared_tracks",
+        payload: { tracks: [{ display_title: "共同歌曲" }] },
+        status: "completed",
+        computed_at: "2026-08-27T00:00:00Z"
+      },
+      {
+        metric_key: "top_artists",
+        payload: { artists: [{ artist: "Artist A" }] },
+        status: "completed",
+        computed_at: "2026-08-27T00:00:00Z"
+      }
+    ],
+    analytics_status: "completed",
+    matched_tracks: []
   };
 }
 

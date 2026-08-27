@@ -87,6 +87,7 @@ def parse_netease_preview(
         owner_nickname=str(creator.get("nickname") or ""),
         owner_avatar_url=secure_media_url(creator.get("avatarUrl")),
         cover_url=secure_media_url(playlist.get("coverImgUrl")),
+        source_tags=string_list(playlist.get("tags")),
         track_count=int(playlist.get("trackCount") or 0),
         preview_status="ready",
     )
@@ -115,6 +116,7 @@ def parse_qq_preview(
             owner_nickname=qq_musicu_owner_nickname(musicu_playlist),
             owner_avatar_url=secure_media_url(qq_musicu_owner_avatar(musicu_playlist)),
             cover_url=secure_media_url(musicu_playlist.get("picurl")),
+            source_tags=qq_playlist_tags(musicu_playlist),
             track_count=int(musicu_playlist.get("songnum") or 0),
             preview_status="ready",
         )
@@ -136,6 +138,7 @@ def parse_qq_preview(
         owner_nickname=str(playlist.get("nick") or ""),
         owner_avatar_url=secure_media_url(playlist.get("headurl")),
         cover_url=secure_media_url(playlist.get("logo")),
+        source_tags=qq_playlist_tags(playlist),
         track_count=int(playlist.get("total_song_num") or 0),
         preview_status="ready",
     )
@@ -147,6 +150,31 @@ def secure_media_url(value: Any) -> str:
         return f"https://{url.removeprefix('http://')}"
 
     return url
+
+
+def string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def qq_playlist_tags(playlist: dict[str, Any]) -> list[str]:
+    raw_tags = playlist.get("taglist") or playlist.get("tags") or playlist.get("tag")
+    if isinstance(raw_tags, str):
+        return [raw_tags.strip()] if raw_tags.strip() else []
+    if not isinstance(raw_tags, list):
+        return []
+
+    tags = []
+    for item in raw_tags:
+        if isinstance(item, dict):
+            tag = item.get("name") or item.get("title") or item.get("tagname")
+        else:
+            tag = item
+        text = str(tag or "").strip()
+        if text:
+            tags.append(text)
+    return tags
 
 
 def qq_musicu_payload(playlist_id: str, song_num: int) -> dict[str, Any]:

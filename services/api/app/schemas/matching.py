@@ -5,6 +5,12 @@ from pydantic import BaseModel, Field
 from app.schemas.dedupe import Contributor
 
 
+class GenreAssignment(BaseModel):
+    genre: str
+    source: str
+    confidence: float = Field(ge=0, le=1)
+
+
 class NeteaseTrackCandidate(BaseModel):
     netease_song_id: str
     title: str
@@ -24,6 +30,7 @@ class MatchedTrackItem(BaseModel):
     cover_url: str | None = None
     source_track_ids: list[str]
     contributors: list[Contributor]
+    genre_assignments: list[GenreAssignment] = Field(default_factory=list)
     match_status: Literal[
         "auto_accepted",
         "needs_confirm",

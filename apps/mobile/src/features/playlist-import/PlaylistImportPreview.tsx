@@ -3,23 +3,29 @@
 import type {
   ImportSessionResponse,
   MatchedTrackItem,
+  NeteaseTrackCandidate,
   PlaylistPreviewItem
 } from "@mugame/contracts/imports";
 import { useEffect, useRef, useState } from "react";
 import { FullImportProgress } from "./FullImportProgress";
-import { MatchJobProgress } from "./MatchJobProgress";
 import { MatchReviewPanel } from "./MatchReviewPanel";
 import { PlaylistPreviewCard } from "./PlaylistPreviewCard";
 import { TempPlaylistSyncPanel } from "./TempPlaylistSyncPanel";
 import {
+  confirmManualMatch,
   getImportSession,
   previewPlaylists,
   retryFullImport,
-  startFullImport
+  startImportOrchestration
 } from "./importPreviewService";
+import {
+  AnalyticsStatusText,
+  matchResultFromSession,
+  nextFullImportStatus,
+  shouldPollSession,
+  tempPlaylistResultFromSession
+} from "./importOrchestrationView";
 import { playlistImportErrorMessage } from "./playlistImportErrors";
-import { useImportMatching } from "./useImportMatching";
-import { useTempPlaylistSync } from "./useTempPlaylistSync";
 
 export interface ReadyToPlayPayload {
   tempPlaylistId: string;
@@ -40,9 +46,13 @@ type FullImportState =
 
 interface PlaylistImportPreviewProps {
   onReadyToPlay?: (payload: ReadyToPlayPayload) => void;
+  onSessionChange?: (session: ImportSessionResponse) => void;
 }
 
-export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewProps) {
+export function PlaylistImportPreview({
+  onReadyToPlay,
+  onSessionChange
+}: PlaylistImportPreviewProps) {
   const [rawText, setRawText] = useState("");
   const readyPlaySessionRef = useRef<string | undefined>(undefined);
   const [preview, setPreview] = useState<PreviewState>({
@@ -50,19 +60,11 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
     items: []
   });
   const [fullImport, setFullImport] = useState<FullImportState>({ status: "idle" });
-  const { confirmCandidate, matching, resetMatching, startMatching } = useImportMatching(
-    fullImport.session
-  );
-  const { startSync, syncState } = useTempPlaylistSync(fullImport.session);
   const readyItems = preview.items.filter((item) => item.preview_status === "ready");
   const canConfirm = readyItems.length > 0 && preview.status !== "loading";
-  const canMatch =
-    Boolean(fullImport.session) &&
-    fullImport.status !== "loading" &&
-    matching.status !== "loading";
 
   useEffect(() => {
-    if (fullImport.status !== "loading" || !fullImport.session) {
+    if (!fullImport.session || !shouldPollSession(fullImport.session)) {
       return;
     }
 
@@ -75,19 +77,26 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
   }, [fullImport]);
 
   useEffect(() => {
-    if (!matching.result || !syncState.result || syncState.status !== "ready") {
+    const playback = fullImport.session?.playback;
+    if (!playback || fullImport.session?.status !== "ready_to_play") {
       return;
     }
-    const key = `${matching.result.import_session_id}:${syncState.result.ready_at ?? "ready"}`;
+    const key = `${fullImport.session.id}:${fullImport.session.ready_to_play_at ?? "ready"}`;
     if (readyPlaySessionRef.current === key) {
       return;
     }
     readyPlaySessionRef.current = key;
     onReadyToPlay?.({
-      tempPlaylistId: syncState.result.temp_playlist_id,
-      tracks: matching.result.tracks
+      tempPlaylistId: playback.temp_playlist_id,
+      tracks: playback.tracks
     });
-  }, [matching.result, onReadyToPlay, syncState]);
+  }, [fullImport.session, onReadyToPlay]);
+
+  useEffect(() => {
+    if (fullImport.session) {
+      onSessionChange?.(fullImport.session);
+    }
+  }, [fullImport.session, onSessionChange]);
 
   async function identifyPlaylists(nextText = rawText) {
     setPreview((current) => ({ status: "loading", items: current.items }));
@@ -95,7 +104,6 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
     try {
       const response = await previewPlaylists(nextText);
       setFullImport({ status: "idle" });
-      resetMatching();
       setPreview({ status: "ready", items: response.items });
     } catch (error) {
       setPreview((current) => ({
@@ -114,7 +122,7 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
     setFullImport({ status: "loading" });
 
     try {
-      const session = await startFullImport(readyItems);
+      const session = await startImportOrchestration(readyItems);
       setFullImport({ status: nextFullImportStatus(session), session });
     } catch (error) {
       setFullImport({ status: "error", message: playlistImportErrorMessage(error) });
@@ -151,6 +159,39 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
       });
     }
   }
+
+  async function confirmCandidate(
+    track: MatchedTrackItem,
+    candidate: NeteaseTrackCandidate
+  ) {
+    if (!fullImport.session) {
+      return;
+    }
+    try {
+      await confirmManualMatch(fullImport.session.id, {
+        source_track_ids: track.source_track_ids,
+        netease_song_id: candidate.netease_song_id,
+        title: candidate.title,
+        artists: candidate.artists,
+        album: candidate.album,
+        duration_ms: candidate.duration_ms
+      });
+      await refreshImportSession(fullImport.session.id);
+    } catch (error) {
+      setFullImport({
+        status: "error",
+        session: fullImport.session,
+        message: playlistImportErrorMessage(error)
+      });
+    }
+  }
+
+  const matchResult = fullImport.session
+    ? matchResultFromSession(fullImport.session)
+    : undefined;
+  const tempPlaylistResult = fullImport.session
+    ? tempPlaylistResultFromSession(fullImport.session)
+    : undefined;
 
   return (
     <div className="import-preview">
@@ -210,57 +251,20 @@ export function PlaylistImportPreview({ onReadyToPlay }: PlaylistImportPreviewPr
             onRetry={() => void retryFailedSources()}
             session={fullImport.session}
           />
-          <button
-            className="secondary-action"
-            disabled={!canMatch}
-            onClick={() => void startMatching()}
-            type="button"
-          >
-            {matching.status === "loading" ? "匹配中" : "匹配网易云歌曲"}
-          </button>
+          <AnalyticsStatusText status={fullImport.session.analytics_status} />
         </>
       ) : null}
 
-      {matching.status === "error" || matching.status === "rate_limited" ? (
-        <p className="account-error">{matching.message}</p>
+      {matchResult ? (
+        <MatchReviewPanel
+          matching={matchResult}
+          onConfirm={(track, candidate) => void confirmCandidate(track, candidate)}
+        />
       ) : null}
 
-      {matching.status === "loading" || matching.status === "rate_limited" ? (
-        <MatchJobProgress job={matching.job} />
+      {tempPlaylistResult ? (
+        <TempPlaylistSyncPanel result={tempPlaylistResult} />
       ) : null}
-
-      {matching.result ? (
-        <>
-          <MatchReviewPanel
-            matching={matching.result}
-            onConfirm={(track, candidate) => void confirmCandidate(track, candidate)}
-          />
-          <button
-            className="secondary-action"
-            disabled={syncState.status === "loading"}
-            onClick={() => void startSync()}
-            type="button"
-          >
-            {syncState.status === "loading" ? "同步中" : "同步临时歌单"}
-          </button>
-        </>
-      ) : null}
-
-      {syncState.status === "auth_expired" ||
-      syncState.status === "error" ||
-      syncState.status === "partial_failed" ? (
-        <p className="account-error">{syncState.message}</p>
-      ) : null}
-
-      {syncState.result ? <TempPlaylistSyncPanel result={syncState.result} /> : null}
     </div>
   );
-}
-
-function nextFullImportStatus(session: ImportSessionResponse) {
-  if (session.status === "pending" || session.status === "reading") {
-    return "loading";
-  }
-
-  return "ready";
 }

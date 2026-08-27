@@ -52,7 +52,7 @@ def get_settings() -> Settings:
             "MUGAME_TEMP_PLAYLIST_NAME",
             "MusicGame · 当前游戏",
         ),
-        temp_playlist_batch_size=int(os.getenv("MUGAME_TEMP_PLAYLIST_BATCH_SIZE", "200")),
+        temp_playlist_batch_size=int(os.getenv("MUGAME_TEMP_PLAYLIST_BATCH_SIZE", "20")),
         temp_playlist_batch_retry_count=int(
             os.getenv("MUGAME_TEMP_PLAYLIST_BATCH_RETRY_COUNT", "1")
         ),

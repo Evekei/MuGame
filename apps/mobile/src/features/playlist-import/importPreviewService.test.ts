@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   configureImportPreviewService,
   getMatchJob,
+  retryImportAnalytics,
+  startImportOrchestration,
   startFullImport,
   startMatchJob,
   previewPlaylists,
@@ -88,8 +90,86 @@ describe("importPreviewService", () => {
           owner_nickname: "Alice",
           owner_avatar_url: undefined,
           cover_url: undefined,
+          source_tags: [],
           track_count: undefined
         }
+      ]
+    });
+  });
+
+  it("starts orchestration with ready preview items only", async () => {
+    const startOrchestrationApi = vi.fn().mockResolvedValue({ id: "session-1" });
+    configureImportPreviewService(
+      mockApi({ startOrchestration: startOrchestrationApi })
+    );
+
+    await startImportOrchestration([
+      {
+        platform: "netease",
+        canonical_url: "https://music.163.com/playlist?id=1",
+        source_playlist_id: "1",
+        title: "Alice 的歌单",
+        owner_source_id: "owner-a",
+        owner_nickname: "Alice",
+        preview_status: "ready"
+      },
+      {
+        preview_status: "failed",
+        error: { code: "bad", message: "Bad link" }
+      }
+    ]);
+
+    expect(startOrchestrationApi).toHaveBeenCalledWith({
+      source_playlists: [
+        {
+          platform: "netease",
+          canonical_url: "https://music.163.com/playlist?id=1",
+          source_playlist_id: "1",
+          title: "Alice 的歌单",
+          owner_source_id: "owner-a",
+          owner_nickname: "Alice",
+          owner_avatar_url: undefined,
+          cover_url: undefined,
+          source_tags: [],
+          track_count: undefined
+        }
+      ]
+    });
+  });
+
+  it("adds a unified import track limit when orchestration starts", async () => {
+    const startOrchestrationApi = vi.fn().mockResolvedValue({ id: "session-1" });
+    configureImportPreviewService(
+      mockApi({ startOrchestration: startOrchestrationApi })
+    );
+
+    await startImportOrchestration([readyPreviewItem()], {
+      importTrackLimit: 40
+    });
+
+    expect(startOrchestrationApi).toHaveBeenCalledWith({
+      source_playlists: [
+        expect.objectContaining({
+          import_track_limit: 40,
+          source_playlist_id: "1"
+        })
+      ]
+    });
+  });
+
+  it("omits the import track limit when it is not set", async () => {
+    const startOrchestrationApi = vi.fn().mockResolvedValue({ id: "session-1" });
+    configureImportPreviewService(
+      mockApi({ startOrchestration: startOrchestrationApi })
+    );
+
+    await startImportOrchestration([readyPreviewItem()]);
+
+    expect(startOrchestrationApi).toHaveBeenCalledWith({
+      source_playlists: [
+        expect.not.objectContaining({
+          import_track_limit: expect.any(Number)
+        })
       ]
     });
   });
@@ -118,6 +198,17 @@ describe("importPreviewService", () => {
 
     expect(syncTempPlaylistApi).toHaveBeenCalledWith("session-1");
   });
+
+  it("retries analytics through the API layer", async () => {
+    const retryAnalyticsApi = vi.fn().mockResolvedValue({ id: "session-1" });
+    configureImportPreviewService(
+      mockApi({ retryAnalytics: retryAnalyticsApi })
+    );
+
+    await retryImportAnalytics("session-1");
+
+    expect(retryAnalyticsApi).toHaveBeenCalledWith("session-1");
+  });
 });
 
 function mockApi(overrides = {}) {
@@ -127,10 +218,24 @@ function mockApi(overrides = {}) {
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
+    retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
+    startOrchestration: vi.fn(),
     syncTempPlaylist: vi.fn(),
     ...overrides
+  };
+}
+
+function readyPreviewItem() {
+  return {
+    platform: "netease" as const,
+    canonical_url: "https://music.163.com/playlist?id=1",
+    source_playlist_id: "1",
+    title: "Alice 的歌单",
+    owner_source_id: "owner-a",
+    owner_nickname: "Alice",
+    preview_status: "ready" as const
   };
 }

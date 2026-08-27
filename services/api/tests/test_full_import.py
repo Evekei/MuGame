@@ -39,6 +39,30 @@ class FlakyAdapter(SameTitleAdapter):
         return super().fetch_full_playlist(source, on_progress)
 
 
+class ManyTracksAdapter(FullPlaylistAdapter):
+    platform = "netease"
+
+    def fetch_full_playlist(self, source, on_progress):
+        tracks = [
+            SourceTrackItem(
+                id=f"track-{source.owner_source_id}-{index}",
+                platform=source.platform,
+                source_track_id=f"song-{index}",
+                title=f"歌曲 {index}",
+                artists=["Artist"],
+                album="Album",
+                duration_ms=180000,
+                cover_url=None,
+                source_playlist_id=source.source_playlist_id,
+                owner_source_id=source.owner_source_id,
+                owner_nickname=source.owner_nickname,
+            )
+            for index in range(source.track_count or 0)
+        ]
+        on_progress(len(tracks), source.track_count)
+        return tracks
+
+
 def test_full_import_keeps_raw_tracks_for_each_owner(tmp_path: Path) -> None:
     repository = ImportRepository(str(tmp_path / "imports.sqlite3"))
     service = FullImportService(repository, {"netease": SameTitleAdapter()})
@@ -104,11 +128,54 @@ def test_failed_source_can_retry_without_new_session(tmp_path: Path) -> None:
     assert retried.tracks[0].owner_nickname == "Alice"
 
 
+def test_full_import_samples_each_source_playlist_limit(tmp_path: Path) -> None:
+    repository = ImportRepository(str(tmp_path / "imports.sqlite3"))
+    service = FullImportService(repository, {"netease": ManyTracksAdapter()})
+
+    session = service.create_session(
+        FullImportRequest(
+            source_playlists=[
+                source_playlist("1", "owner-a", "Alice", track_count=6, import_track_limit=2),
+                source_playlist("2", "owner-b", "Bob", track_count=6, import_track_limit=2),
+            ]
+        )
+    )
+    service.run_import(session.id)
+
+    imported = service.get_session(session.id)
+
+    assert imported.status == "ready"
+    assert imported.raw_track_count == 4
+    assert imported.progress is None
+    assert [source.read_count for source in imported.source_playlists] == [2, 2]
+    assert {track.owner_nickname for track in imported.tracks} == {"Alice", "Bob"}
+
+
+def test_full_import_imports_all_tracks_when_limit_is_not_set(tmp_path: Path) -> None:
+    repository = ImportRepository(str(tmp_path / "imports.sqlite3"))
+    service = FullImportService(repository, {"netease": ManyTracksAdapter()})
+
+    session = service.create_session(
+        FullImportRequest(
+            source_playlists=[source_playlist("1", "owner-a", "Alice", track_count=5)]
+        )
+    )
+    service.run_import(session.id)
+
+    imported = service.get_session(session.id)
+
+    assert imported.status == "ready"
+    assert imported.raw_track_count == 5
+    assert len(imported.tracks) == 5
+
+
 def source_playlist(
     playlist_id: str,
     owner_id: str,
     owner_name: str,
     platform: str = "netease",
+    track_count: int = 1,
+    import_track_limit: int | None = None,
 ) -> ConfirmedSourcePlaylist:
     return ConfirmedSourcePlaylist(
         platform=platform,
@@ -117,5 +184,6 @@ def source_playlist(
         title=f"{owner_name} 的歌单",
         owner_source_id=owner_id,
         owner_nickname=owner_name,
-        track_count=1,
+        track_count=track_count,
+        import_track_limit=import_track_limit,
     )

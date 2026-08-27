@@ -10,6 +10,11 @@ export interface PlayerTrack {
   cover_url?: string;
 }
 
+export interface FloatingAnalyticsSummary {
+  lines: string[];
+  status: string;
+}
+
 export type NeteasePlaybackMonitorStatus =
   | "unsupported"
   | "permission_required"

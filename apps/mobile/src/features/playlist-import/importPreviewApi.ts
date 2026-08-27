@@ -20,9 +20,11 @@ export interface ImportPreviewApi {
   getMatchJob: (jobId: string) => Promise<MatchJobResponse>;
   matchTracks: (sessionId: string) => Promise<MatchTracksResponse>;
   preview: (request: ImportPreviewRequest) => Promise<ImportPreviewResponse>;
+  retryAnalytics: (sessionId: string) => Promise<ImportSessionResponse>;
   retryFullImport: (sessionId: string) => Promise<ImportSessionResponse>;
   startMatchJob: (sessionId: string) => Promise<MatchJobResponse>;
   startFullImport: (request: FullImportRequest) => Promise<ImportSessionResponse>;
+  startOrchestration: (request: FullImportRequest) => Promise<ImportSessionResponse>;
   syncTempPlaylist: (sessionId: string) => Promise<TempPlaylistSyncResponse>;
 }
 
@@ -38,12 +40,19 @@ export const importPreviewApi: ImportPreviewApi = {
   matchTracks: (sessionId) =>
     postJson<MatchTracksResponse>(`/imports/sessions/${sessionId}/match`, {}),
   preview: (request) => postJson<ImportPreviewResponse>("/imports/preview", request),
+  retryAnalytics: (sessionId) =>
+    postJson<ImportSessionResponse>(
+      `/imports/sessions/${sessionId}/analytics/retry`,
+      {}
+    ),
   retryFullImport: (sessionId) =>
     postJson<ImportSessionResponse>(`/imports/sessions/${sessionId}/retry`, {}),
   startMatchJob: (sessionId) =>
     postJson<MatchJobResponse>(`/imports/sessions/${sessionId}/match-jobs`, {}),
   startFullImport: (request) =>
     postJson<ImportSessionResponse>("/imports/full", request),
+  startOrchestration: (request) =>
+    postJson<ImportSessionResponse>("/imports/orchestrations", request),
   syncTempPlaylist: (sessionId) =>
     postJson<TempPlaylistSyncResponse>(
       `/imports/sessions/${sessionId}/temp-playlist/sync`,

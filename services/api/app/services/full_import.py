@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from hashlib import sha256
 from uuid import uuid4
 import logging
 
@@ -8,6 +9,7 @@ from app.schemas.imports import (
     ConfirmedSourcePlaylist,
     FullImportRequest,
     ImportSessionResponse,
+    SourceTrackItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,14 +63,23 @@ class FullImportService:
         try:
             self.repository.mark_source_reading(
                 source.id,
-                source.source.track_count,
+                effective_track_total(source.source.track_count, source.source.import_track_limit),
                 source.read_count,
             )
             tracks = adapter.fetch_full_playlist(
                 source.source,
-                lambda read_count, total: self._record_progress(source.id, read_count, total),
+                lambda read_count, total: self._record_progress(
+                    source.id,
+                    effective_read_count(read_count, source.source.import_track_limit),
+                    effective_track_total(total, source.source.import_track_limit),
+                ),
             )
-            self.repository.save_source_tracks(session_id, source, tracks)
+            sampled_tracks = sample_source_tracks(
+                tracks,
+                source.source.import_track_limit,
+                f"{session_id}:{source.id}",
+            )
+            self.repository.save_source_tracks(session_id, source, sampled_tracks)
         except Exception as error:
             logger.exception(
                 "Failed to import source playlist",
@@ -103,3 +114,39 @@ def dedupe_sources(
         seen.add(key)
         deduped.append(source)
     return deduped
+
+
+def sample_source_tracks(
+    tracks: list[SourceTrackItem],
+    limit: int | None,
+    seed: str,
+) -> list[SourceTrackItem]:
+    if limit is None or len(tracks) <= limit:
+        return tracks
+    keyed_tracks = [
+        (
+            sha256(track_sample_key(seed, index, track).encode()).hexdigest(),
+            index,
+            track,
+        )
+        for index, track in enumerate(tracks)
+    ]
+    return [track for _key, _index, track in sorted(keyed_tracks)[:limit]]
+
+
+def track_sample_key(seed: str, index: int, track: SourceTrackItem) -> str:
+    return f"{seed}:{index}:{track.platform}:{track.source_track_id}:{track.title}"
+
+
+def effective_track_total(total: int | None, limit: int | None) -> int | None:
+    if limit is None:
+        return total
+    if total is None:
+        return limit
+    return min(total, limit)
+
+
+def effective_read_count(read_count: int, limit: int | None) -> int:
+    if limit is None:
+        return read_count
+    return min(read_count, limit)

@@ -22,13 +22,16 @@ class FakeFullAdapter(FullPlaylistAdapter):
     platform = "netease"
 
     def fetch_full_playlist(self, source, on_progress):
-        on_progress(1, source.track_count)
+        total = source.track_count or 1
+        on_progress(total, source.track_count)
         return [
             SourceTrackItem(
-                id=f"track-{source.source_playlist_id}",
+                id=f"track-{source.source_playlist_id}-{index}",
                 platform=source.platform,
-                source_track_id=f"song-{source.source_playlist_id}",
-                title="共同歌曲",
+                source_track_id=f"song-{source.source_playlist_id}"
+                if total == 1
+                else f"song-{source.source_playlist_id}-{index}",
+                title="共同歌曲" if total == 1 else f"歌曲 {index}",
                 artists=["Artist"],
                 album=None,
                 duration_ms=1000,
@@ -37,6 +40,7 @@ class FakeFullAdapter(FullPlaylistAdapter):
                 owner_source_id=source.owner_source_id,
                 owner_nickname=source.owner_nickname,
             )
+            for index in range(total)
         ]
 
 
@@ -96,6 +100,42 @@ def test_full_import_api_creates_session_and_tracks(tmp_path: Path) -> None:
         "Alice",
         "Bob",
     ]
+
+
+def test_full_import_api_limits_tracks_per_source_playlist(tmp_path: Path) -> None:
+    repository = ImportRepository(str(tmp_path / "imports.sqlite3"))
+    app.dependency_overrides[get_import_repository] = lambda: repository
+    app.dependency_overrides[get_full_playlist_adapters] = lambda: {
+        "netease": FakeFullAdapter()
+    }
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/imports/full",
+            json={
+                "source_playlists": [
+                    source_payload(
+                        "1",
+                        "owner-a",
+                        "Alice",
+                        track_count=5,
+                        import_track_limit=2,
+                    )
+                ]
+            },
+        )
+        session_id = response.json()["id"]
+        session = client.get(f"/imports/sessions/{session_id}").json()
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert session["status"] == "ready"
+    assert session["raw_track_count"] == 2
+    assert session["source_playlists"][0]["import_track_limit"] == 2
+    assert session["source_playlists"][0]["read_count"] == 2
+    assert len(session["tracks"]) == 2
 
 
 def test_match_api_returns_candidates_and_confirm_writes_cache(tmp_path: Path) -> None:
@@ -221,16 +261,21 @@ def source_payload(
     owner_id: str,
     owner_name: str,
     platform: str = "netease",
+    track_count: int = 1,
+    import_track_limit: int | None = None,
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "platform": platform,
         "canonical_url": canonical_url(platform, playlist_id),
         "source_playlist_id": playlist_id,
         "title": f"{owner_name} 的歌单",
         "owner_source_id": owner_id,
         "owner_nickname": owner_name,
-        "track_count": 1,
+        "track_count": track_count,
     }
+    if import_track_limit is not None:
+        payload["import_track_limit"] = import_track_limit
+    return payload
 
 
 def canonical_url(platform: str, playlist_id: str) -> str:

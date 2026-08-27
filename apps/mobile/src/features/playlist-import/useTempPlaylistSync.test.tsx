@@ -37,6 +37,8 @@ function TempSyncProbe() {
     raw_track_count: 1,
     source_playlists: [],
     tracks: [],
+    analytics_results: [],
+    matched_tracks: [],
     created_at: "2026-08-23T00:00:00Z",
     updated_at: "2026-08-23T00:00:00Z"
   });
@@ -58,9 +60,11 @@ function mockApi(overrides = {}) {
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
+    retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
+    startOrchestration: vi.fn(),
     syncTempPlaylist: vi.fn(),
     ...overrides
   };

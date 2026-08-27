@@ -1,6 +1,10 @@
 "use client";
 
-import type { NeteasePlaybackMetadata, PlayerTrack } from "@mugame/contracts/player";
+import type {
+  FloatingAnalyticsSummary,
+  NeteasePlaybackMetadata,
+  PlayerTrack
+} from "@mugame/contracts/player";
 import { registerPlugin, WebPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export type NeteasePlayerBridgeErrorCode =
@@ -21,7 +25,10 @@ export interface NeteasePlayerBridge {
   ensureLoggedIn: () => Promise<void>;
   getCurrentPlaybackMetadata: () => Promise<NeteasePlaybackMetadata>;
   initialize: () => Promise<void>;
-  configureSourceReveal: (options: { tracks: PlayerTrack[] }) => Promise<void>;
+  configureSourceReveal: (options: {
+    analytics?: FloatingAnalyticsSummary;
+    tracks: PlayerTrack[];
+  }) => Promise<void>;
   isFloatingWindowEnabled: () => Promise<{ enabled: boolean }>;
   isPlaylistAutoplayEnabled: () => Promise<{ enabled: boolean }>;
   isPlaybackMonitorEnabled: () => Promise<{ enabled: boolean }>;

@@ -6,12 +6,15 @@ from app.integrations.playlist_full import (
     default_full_playlist_adapters,
 )
 from app.integrations.netease.track_search import NeteaseTrackSearchAdapter
+from app.integrations.netease.temp_playlist import NeteaseTempPlaylistAdapter
 from app.integrations.playlist_preview import (
     PlaylistPreviewAdapter,
     default_playlist_preview_adapters,
 )
+from app.api.account import get_account_session_repository
 from app.repositories.account_session_repository import AccountSessionRepository
 from app.repositories.import_repository import ImportRepository
+from app.repositories.orchestration_repository import OrchestrationRepository
 from app.repositories.track_mapping_repository import TrackMappingRepository
 from app.domain.track_matching import MatchThresholds
 from app.schemas.imports import (
@@ -21,8 +24,11 @@ from app.schemas.imports import (
     ImportSessionResponse,
 )
 from app.services.full_import import FullImportService
+from app.services.analytics import AnalyticsService
+from app.services.import_orchestrator import ImportOrchestrator
 from app.services.import_preview import ImportPreviewService
 from app.services.match_job import MatchJobService
+from app.services.temp_playlist import TempPlaylistService
 from app.services.track_dedupe import TrackDedupeService
 from app.services.track_matching import TrackMatchingService
 
@@ -71,6 +77,12 @@ def get_import_repository(
     return ImportRepository(settings.database_path)
 
 
+def get_orchestration_repository(
+    settings: Settings = Depends(get_settings),
+) -> OrchestrationRepository:
+    return OrchestrationRepository(settings.database_path)
+
+
 def get_track_mapping_repository(
     settings: Settings = Depends(get_settings),
 ) -> TrackMappingRepository:
@@ -107,6 +119,60 @@ def get_track_matching_service(
     )
 
 
+def get_temp_playlist_service(
+    settings: Settings = Depends(get_settings),
+    import_repository: ImportRepository = Depends(get_import_repository),
+    mapping_repository: TrackMappingRepository = Depends(get_track_mapping_repository),
+    account_repository: AccountSessionRepository = Depends(get_account_session_repository),
+) -> TempPlaylistService:
+    return TempPlaylistService(
+        import_repository=import_repository,
+        mapping_repository=mapping_repository,
+        account_repository=account_repository,
+        adapter_factory=lambda record: NeteaseTempPlaylistAdapter(
+            settings.netease_request_timeout_seconds,
+            record.cookies,
+            record.profile.user_id,
+        ),
+        playlist_name=settings.temp_playlist_name,
+        batch_size=settings.temp_playlist_batch_size,
+        retry_count=settings.temp_playlist_batch_retry_count,
+    )
+
+
+def get_analytics_service(
+    import_repository: ImportRepository = Depends(get_import_repository),
+    orchestration_repository: OrchestrationRepository = Depends(
+        get_orchestration_repository
+    ),
+) -> AnalyticsService:
+    return AnalyticsService(import_repository, orchestration_repository)
+
+
+def get_import_orchestrator(
+    import_repository: ImportRepository = Depends(get_import_repository),
+    orchestration_repository: OrchestrationRepository = Depends(
+        get_orchestration_repository
+    ),
+    mapping_repository: TrackMappingRepository = Depends(get_track_mapping_repository),
+    full_import_service: FullImportService = Depends(get_full_import_service),
+    dedupe_service: TrackDedupeService = Depends(get_track_dedupe_service),
+    matching_service: TrackMatchingService = Depends(get_track_matching_service),
+    temp_playlist_service: TempPlaylistService = Depends(get_temp_playlist_service),
+    analytics_service: AnalyticsService = Depends(get_analytics_service),
+) -> ImportOrchestrator:
+    return ImportOrchestrator(
+        import_repository=import_repository,
+        orchestration_repository=orchestration_repository,
+        mapping_repository=mapping_repository,
+        full_import_service=full_import_service,
+        dedupe_service=dedupe_service,
+        matching_service=matching_service,
+        temp_playlist_service=temp_playlist_service,
+        analytics_service=analytics_service,
+    )
+
+
 def get_match_job_service() -> MatchJobService:
     return match_job_service
 
@@ -130,6 +196,14 @@ def start_full_import(
     return service.get_session(session.id)
 
 
+@router.post("/orchestrations", response_model=ImportSessionResponse)
+def start_import_orchestration(
+    request: FullImportRequest,
+    service: ImportOrchestrator = Depends(get_import_orchestrator),
+) -> ImportSessionResponse:
+    return service.start(request)
+
+
 @router.get("/sessions/{session_id}", response_model=ImportSessionResponse)
 def get_import_session(
     session_id: str,
@@ -144,10 +218,23 @@ def get_import_session(
 @router.post("/sessions/{session_id}/retry", response_model=ImportSessionResponse)
 def retry_failed_import_sources(
     session_id: str,
+    orchestrator: ImportOrchestrator = Depends(get_import_orchestrator),
     service: FullImportService = Depends(get_full_import_service),
 ) -> ImportSessionResponse:
     try:
+        if orchestrator.orchestration_repository.has_orchestration(session_id):
+            return orchestrator.retry(session_id)
         return service.retry_failed(session_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Import session not found.") from error
 
+
+@router.post("/sessions/{session_id}/analytics/retry", response_model=ImportSessionResponse)
+def retry_import_analytics(
+    session_id: str,
+    orchestrator: ImportOrchestrator = Depends(get_import_orchestrator),
+) -> ImportSessionResponse:
+    try:
+        return orchestrator.retry_analytics(session_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Import session not found.") from error

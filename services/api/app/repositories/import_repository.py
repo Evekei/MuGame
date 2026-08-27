@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 import sqlite3
 
@@ -41,9 +42,10 @@ class ImportRepository:
                     INSERT INTO source_playlists (
                         id, import_session_id, platform, source_playlist_id, source_url,
                         title, owner_source_id, owner_nickname, owner_avatar_url,
-                        cover_url, track_count, status, read_count
+                        cover_url, source_tags_json, track_count, import_track_limit,
+                        status, read_count
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         playlist_row_id(session_id, source),
@@ -56,7 +58,9 @@ class ImportRepository:
                         source.owner_nickname,
                         source.owner_avatar_url,
                         source.cover_url,
+                        json.dumps(source.source_tags, ensure_ascii=False),
                         source.track_count,
+                        source.import_track_limit,
                         "pending",
                         0,
                     ),
@@ -156,8 +160,45 @@ class ImportRepository:
                 """,
                 (session_id,),
             ).fetchall()
+            orchestration = connection.execute(
+                "SELECT * FROM import_orchestrations WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            matched_rows = connection.execute(
+                """
+                SELECT *
+                FROM orchestration_matched_tracks
+                WHERE session_id = ?
+                ORDER BY matched_index ASC
+                """,
+                (session_id,),
+            ).fetchall()
+            analytics_job = None
+            analytics_rows = []
+            if orchestration is not None and orchestration["analytics_job_id"]:
+                analytics_job = connection.execute(
+                    "SELECT * FROM analytics_jobs WHERE id = ?",
+                    (orchestration["analytics_job_id"],),
+                ).fetchone()
+                analytics_rows = connection.execute(
+                    """
+                    SELECT *
+                    FROM analytics_results
+                    WHERE job_id = ?
+                    ORDER BY metric_key ASC
+                    """,
+                    (orchestration["analytics_job_id"],),
+                ).fetchall()
 
-        return import_session_from_rows(session, source_rows, track_rows)
+        return import_session_from_rows(
+            session,
+            source_rows,
+            track_rows,
+            orchestration,
+            matched_rows,
+            analytics_job,
+            analytics_rows,
+        )
 
     def _update_source(
         self,

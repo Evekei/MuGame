@@ -8,8 +8,16 @@ describe("PlayerPage", () => {
   it("initializes the NetEase temp playlist and opens NetEase playback", async () => {
     const user = userEvent.setup();
     const player = createPlayer();
+    const onPlaybackOpened = vi.fn();
 
-    render(<PlayerPage player={player} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />);
+    render(
+      <PlayerPage
+        onPlaybackOpened={onPlaybackOpened}
+        player={player}
+        tempPlaylistId="temp-1"
+        tracks={[matchedTrack()]}
+      />
+    );
 
     expect(player.startSession).toHaveBeenCalledWith([matchedTrack()], {
       tempPlaylistId: "temp-1"
@@ -19,6 +27,7 @@ describe("PlayerPage", () => {
     await user.click(screen.getByRole("button", { name: "打开网易云播放" }));
 
     expect(player.play).toHaveBeenCalledOnce();
+    expect(onPlaybackOpened).toHaveBeenCalledOnce();
   });
 
   it("does not render app-owned playback metadata, progress, controls, or lyrics", () => {
@@ -38,6 +47,23 @@ describe("PlayerPage", () => {
     render(<PlayerPage player={createPlayer()} tracks={[matchedTrack()]} />);
 
     expect(screen.getByRole("button", { name: "打开网易云播放" })).toBeDisabled();
+  });
+
+  it("opens analytics from the play card", async () => {
+    const user = userEvent.setup();
+    const onOpenStats = vi.fn();
+    render(
+      <PlayerPage
+        onOpenStats={onOpenStats}
+        player={createPlayer()}
+        tempPlaylistId="temp-1"
+        tracks={[matchedTrack()]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开统计页面" }));
+
+    expect(onOpenStats).toHaveBeenCalledOnce();
   });
 
   it("opens floating window settings when overlay permission is missing", async () => {
@@ -91,6 +117,7 @@ describe("PlayerPage", () => {
 
 function createPlayer(): PlayerController {
   return {
+    configureAnalytics: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn().mockResolvedValue(undefined),
     initialize: vi.fn().mockResolvedValue(undefined),
     isFloatingWindowEnabled: vi.fn().mockResolvedValue({ enabled: true }),

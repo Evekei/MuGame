@@ -18,6 +18,8 @@ from app.schemas.temp_playlist import (
 from app.services.temp_playlist_batches import add_target_tracks, run_batches
 from app.services.track_dedupe import TrackDedupeService
 
+NETEASE_TRACK_MANIPULATE_BATCH_LIMIT = 20
+
 
 class TempPlaylistService:
     def __init__(
@@ -35,7 +37,7 @@ class TempPlaylistService:
         self.account_repository = account_repository
         self.adapter_factory = adapter_factory
         self.playlist_name = playlist_name
-        self.batch_size = max(1, batch_size)
+        self.batch_size = min(max(1, batch_size), NETEASE_TRACK_MANIPULATE_BATCH_LIMIT)
         self.retry_count = max(0, retry_count)
         self.dedupe_service = TrackDedupeService()
 

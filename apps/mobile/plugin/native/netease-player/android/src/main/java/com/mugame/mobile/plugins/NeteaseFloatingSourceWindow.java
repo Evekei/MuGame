@@ -20,13 +20,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 final class NeteaseFloatingSourceWindow {
-    private static final int WIDTH_DP = 210;
-    private static final int MAX_HEIGHT_DP = 150;
+    private static final int WIDTH_DP = 238;
+    private static final int MAX_HEIGHT_DP = 220;
     private static final int BALL_SIZE_DP = 54;
 
     private final Context context;
     private final WindowManager windowManager;
     private final List<RevealTrack> tracks = new ArrayList<>();
+    private String analyticsText = "统计暂无数据\n完成导入后会显示结果";
     private View rootView;
     private View expandedView;
     private View ballView;
@@ -58,6 +59,29 @@ final class NeteaseFloatingSourceWindow {
                 tracks.add(RevealTrack.fromJson(item));
             }
         }
+    }
+
+    void updateAnalytics(JSONObject payload) {
+        if (payload == null) {
+            analyticsText = "统计暂无数据\n完成导入后会显示结果";
+            return;
+        }
+        JSONArray lines = payload.optJSONArray("lines");
+        if (lines == null || lines.length() == 0) {
+            analyticsText = "统计正在分析\n稍后再点统计";
+            return;
+        }
+        List<String> displayLines = new ArrayList<>();
+        int maxLines = Math.min(lines.length(), 7);
+        for (int index = 0; index < maxLines; index++) {
+            String line = safe(lines.optString(index));
+            if (!line.isEmpty()) {
+                displayLines.add(line);
+            }
+        }
+        analyticsText = displayLines.isEmpty()
+            ? "统计正在分析\n稍后再点统计"
+            : String.join("\n", displayLines);
     }
 
     boolean show() {
@@ -108,6 +132,12 @@ final class NeteaseFloatingSourceWindow {
         checkButton.setOnClickListener(_view -> revealCurrentSource());
         actions.addView(checkButton, new LinearLayout.LayoutParams(0, dp(42), 1));
 
+        Button statsButton = new Button(context);
+        statsButton.setText("统计");
+        statsButton.setAllCaps(false);
+        statsButton.setOnClickListener(_view -> showAnalytics());
+        actions.addView(statsButton, new LinearLayout.LayoutParams(0, dp(42), 1));
+
         Button minimizeButton = new Button(context);
         minimizeButton.setText("-");
         minimizeButton.setAllCaps(false);
@@ -120,7 +150,7 @@ final class NeteaseFloatingSourceWindow {
         statusText.setText("点击 Check 查看来源");
         statusText.setTextColor(Color.WHITE);
         statusText.setTextSize(13);
-        statusText.setMaxLines(4);
+        statusText.setMaxLines(7);
         statusText.setPadding(0, dp(6), 0, 0);
         container.addView(statusText, new LinearLayout.LayoutParams(-1, -2));
         return container;
@@ -184,6 +214,10 @@ final class NeteaseFloatingSourceWindow {
             return;
         }
         statusText.setText(track.title + "\n来源：" + String.join(" / ", track.contributors));
+    }
+
+    private void showAnalytics() {
+        statusText.setText(analyticsText);
     }
 
     private String missingTrackMessage(NeteasePlaybackMetadataSnapshot metadata) {

@@ -2,9 +2,17 @@ from dataclasses import dataclass
 import json
 import sqlite3
 
+from app.repositories.orchestration_records import (
+    analytics_metric_from_row,
+    create_orchestration_tables,
+    matched_track_from_row,
+    playback_payload,
+)
 from app.schemas.imports import (
     ConfirmedSourcePlaylist,
+    ImportProgress,
     ImportSessionResponse,
+    ImportStageProgress,
     PlaylistPreviewError,
     SourcePlaylistImportResult,
     SourceTrackItem,
@@ -47,7 +55,9 @@ def create_import_tables(connection: sqlite3.Connection) -> None:
             owner_nickname TEXT NOT NULL,
             owner_avatar_url TEXT,
             cover_url TEXT,
+            source_tags_json TEXT NOT NULL DEFAULT '[]',
             track_count INTEGER,
+            import_track_limit INTEGER,
             status TEXT NOT NULL,
             read_count INTEGER NOT NULL DEFAULT 0,
             error_code TEXT,
@@ -82,7 +92,15 @@ def create_import_tables(connection: sqlite3.Connection) -> None:
         "platform",
         "TEXT NOT NULL DEFAULT ''",
     )
+    ensure_column(
+        connection,
+        "source_playlists",
+        "source_tags_json",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )
+    ensure_column(connection, "source_playlists", "import_track_limit", "INTEGER")
     ensure_column(connection, "source_tracks", "owner_avatar_url", "TEXT")
+    create_orchestration_tables(connection)
 
 
 def ensure_column(
@@ -132,7 +150,9 @@ def source_from_row(row: sqlite3.Row) -> ConfirmedSourcePlaylist:
         owner_nickname=str(row["owner_nickname"]),
         owner_avatar_url=row["owner_avatar_url"],
         cover_url=row["cover_url"],
+        source_tags=json.loads(str(row["source_tags_json"] or "[]")),
         track_count=row["track_count"],
+        import_track_limit=row["import_track_limit"],
     )
 
 
@@ -178,20 +198,82 @@ def import_session_from_rows(
     session: sqlite3.Row,
     source_rows: list[sqlite3.Row],
     track_rows: list[sqlite3.Row],
+    orchestration: sqlite3.Row | None = None,
+    matched_rows: list[sqlite3.Row] | None = None,
+    analytics_job: sqlite3.Row | None = None,
+    analytics_rows: list[sqlite3.Row] | None = None,
 ) -> ImportSessionResponse:
+    matched_tracks = [
+        matched_track_from_row(row) for row in (matched_rows or [])
+    ]
+    error = None
+    if orchestration is not None and orchestration["error_code"]:
+        error = PlaylistPreviewError(
+            code=str(orchestration["error_code"]),
+            message=str(orchestration["error_message"] or ""),
+        )
+    progress = import_progress(orchestration, source_rows)
     return ImportSessionResponse(
         id=str(session["id"]),
-        status=str(session["status"]),
+        status=str(orchestration["status"]) if orchestration is not None else str(session["status"]),
         raw_track_count=int(session["raw_track_count"]),
         source_playlists=[source_result_from_row(row) for row in source_rows],
         tracks=[track_from_row(row) for row in track_rows],
         created_at=str(session["created_at"]),
         updated_at=str(session["updated_at"]),
+        failed_stage=str(orchestration["failed_stage"]) if orchestration is not None and orchestration["failed_stage"] else None,
+        error=error,
+        progress=progress,
+        temp_playlist_id=str(orchestration["temp_playlist_id"]) if orchestration is not None and orchestration["temp_playlist_id"] else None,
+        ready_to_play_at=str(orchestration["ready_to_play_at"]) if orchestration is not None and orchestration["ready_to_play_at"] else None,
+        analytics_job_id=str(orchestration["analytics_job_id"]) if orchestration is not None and orchestration["analytics_job_id"] else None,
+        analytics_status=str(analytics_job["status"]) if analytics_job is not None else None,
+        analytics_results=[
+            analytics_metric_from_row(row) for row in (analytics_rows or [])
+        ],
+        matched_tracks=matched_tracks,
+        playback=playback_payload(orchestration, matched_tracks),
+    )
+
+
+def import_progress(
+    orchestration: sqlite3.Row | None,
+    source_rows: list[sqlite3.Row],
+) -> ImportProgress | None:
+    if orchestration is None:
+        return None
+    read_total = 0
+    read_count = 0
+    for row in source_rows:
+        read_total += effective_read_total(row)
+        read_count += int(row["read_count"])
+    return ImportProgress(
+        read=ImportStageProgress(current=read_count, total=read_total),
+        match=ImportStageProgress(
+            current=int(orchestration["matched_count"]),
+            total=int(orchestration["match_total"]),
+        ),
+        sync=ImportStageProgress(
+            current=int(orchestration["synced_count"]),
+            total=int(orchestration["sync_total"]),
+        ),
     )
 
 
 def playlist_row_id(session_id: str, source: ConfirmedSourcePlaylist) -> str:
     return f"{session_id}:{source.platform}:{source.source_playlist_id}"
+
+
+def effective_read_total(row: sqlite3.Row) -> int:
+    track_count = row["track_count"]
+    limit = row["import_track_limit"]
+    if limit is None:
+        return int(track_count) if track_count is not None else int(row["read_count"])
+    if str(row["status"]) == "ready":
+        return int(row["read_count"])
+    if track_count is not None:
+        return min(int(track_count), int(limit))
+    return int(limit)
 
 
 def session_status(source_statuses: list[str]) -> str:

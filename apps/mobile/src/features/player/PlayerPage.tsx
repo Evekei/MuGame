@@ -1,14 +1,17 @@
 "use client";
 
-import type { MatchedTrackItem } from "@mugame/contracts/imports";
+import type { ImportSessionResponse, MatchedTrackItem } from "@mugame/contracts/imports";
+import type { FloatingAnalyticsSummary } from "@mugame/contracts/player";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   neteasePlayerService,
+  toFloatingAnalyticsSummary,
   toPlayableTracks,
   type PlayerSessionSummary
 } from "./NeteasePlayerService";
 
 export interface PlayerController {
+  configureAnalytics: (analytics: FloatingAnalyticsSummary) => Promise<void>;
   destroy: () => Promise<void>;
   initialize: () => Promise<void>;
   isFloatingWindowEnabled: () => Promise<{ enabled: boolean }>;
@@ -20,11 +23,14 @@ export interface PlayerController {
   play: () => Promise<void>;
   startSession: (
     tracks: readonly MatchedTrackItem[],
-    options?: { tempPlaylistId?: string }
+    options?: { analytics?: FloatingAnalyticsSummary; tempPlaylistId?: string }
   ) => PlayerSessionSummary;
 }
 
 interface PlayerPageProps {
+  analyticsSession?: ImportSessionResponse;
+  onOpenStats?: () => void;
+  onPlaybackOpened?: () => void;
   player?: PlayerController;
   tempPlaylistId?: string;
   tracks: MatchedTrackItem[];
@@ -67,10 +73,17 @@ const PERMISSION_ACTIONS: {
 ];
 
 export function PlayerPage({
+  analyticsSession,
+  onOpenStats,
+  onPlaybackOpened,
   player = neteasePlayerService,
   tempPlaylistId,
   tracks
 }: PlayerPageProps) {
+  const analyticsSummary = useMemo(
+    () => toFloatingAnalyticsSummary(analyticsSession),
+    [analyticsSession]
+  );
   const playableTracks = useMemo(() => toPlayableTracks(tracks), [tracks]);
   const summary = useMemo(() => playableSummary(tracks), [tracks]);
   const [lastError, setLastError] = useState<string>();
@@ -105,6 +118,10 @@ export function PlayerPage({
   }, [player, refreshPermissions, tempPlaylistId, tracks]);
 
   useEffect(() => {
+    void player.configureAnalytics(analyticsSummary).catch(() => undefined);
+  }, [analyticsSummary, player]);
+
+  useEffect(() => {
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
         void refreshPermissions();
@@ -122,9 +139,14 @@ export function PlayerPage({
     setLastError(undefined);
     try {
       await player.play();
+      onPlaybackOpened?.();
     } catch (error) {
       setLastError(error instanceof Error ? error.message : "网易云播放入口打开失败");
     }
+  }
+
+  function openStatsPage() {
+    onOpenStats?.();
   }
 
   async function openFloatingSettings() {
@@ -180,6 +202,13 @@ export function PlayerPage({
           type="button"
         >
           打开网易云播放
+        </button>
+        <button
+          className="secondary-action player-stats-link"
+          onClick={openStatsPage}
+          type="button"
+        >
+          打开统计页面
         </button>
         {missingPermissions.length > 0 ? (
           <div className="permission-checklist" aria-label="必需权限检查">

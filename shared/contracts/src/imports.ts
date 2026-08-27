@@ -20,6 +20,7 @@ export interface PlaylistPreviewItem {
   owner_nickname?: string;
   owner_avatar_url?: string;
   cover_url?: string;
+  source_tags?: string[];
   track_count?: number;
   preview_status: PlaylistPreviewStatus;
   error?: PlaylistPreviewError;
@@ -38,7 +39,9 @@ export interface ConfirmedSourcePlaylist {
   owner_nickname: string;
   owner_avatar_url?: string;
   cover_url?: string;
+  source_tags?: string[];
   track_count?: number;
+  import_track_limit?: number;
 }
 
 export interface FullImportRequest {
@@ -71,6 +74,25 @@ export type ImportSessionStatus =
   | "reading"
   | "ready"
   | "partial_failed"
+  | "failed"
+  | "previewed"
+  | "importing"
+  | "normalizing"
+  | "matching"
+  | "syncing_temp"
+  | "ready_to_play";
+
+export type ImportFailedStage =
+  | "importing"
+  | "normalizing"
+  | "matching"
+  | "syncing_temp";
+
+export type AnalyticsStatus =
+  | "pending"
+  | "running"
+  | "partial"
+  | "completed"
   | "failed";
 
 export interface SourcePlaylistImportResult extends ConfirmedSourcePlaylist {
@@ -88,6 +110,39 @@ export interface ImportSessionResponse {
   tracks: SourceTrackItem[];
   created_at: string;
   updated_at: string;
+  failed_stage?: ImportFailedStage;
+  error?: PlaylistPreviewError;
+  progress?: ImportProgress;
+  temp_playlist_id?: string;
+  ready_to_play_at?: string;
+  analytics_job_id?: string;
+  analytics_status?: AnalyticsStatus;
+  analytics_results: AnalyticsMetric[];
+  matched_tracks: MatchedTrackItem[];
+  playback?: ImportPlaybackPayload;
+}
+
+export interface ImportStageProgress {
+  current: number;
+  total: number;
+}
+
+export interface ImportProgress {
+  read: ImportStageProgress;
+  match: ImportStageProgress;
+  sync: ImportStageProgress;
+}
+
+export interface AnalyticsMetric {
+  metric_key: string;
+  payload: Record<string, unknown>;
+  status: string;
+  computed_at: string;
+}
+
+export interface ImportPlaybackPayload {
+  temp_playlist_id: string;
+  tracks: MatchedTrackItem[];
 }
 
 export interface Contributor {
@@ -130,6 +185,12 @@ export interface NeteaseTrackCandidate {
   reason: string;
 }
 
+export interface GenreAssignment {
+  genre: string;
+  source: string;
+  confidence: number;
+}
+
 export type MatchStatus =
   | "auto_accepted"
   | "needs_confirm"
@@ -145,6 +206,7 @@ export interface MatchedTrackItem {
   cover_url?: string;
   source_track_ids: string[];
   contributors: Contributor[];
+  genre_assignments?: GenreAssignment[];
   match_status: MatchStatus;
   netease_song_id?: string;
   match_confidence: number;

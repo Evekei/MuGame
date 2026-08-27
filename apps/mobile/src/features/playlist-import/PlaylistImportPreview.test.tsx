@@ -14,13 +14,25 @@ describe("PlaylistImportPreview", () => {
 
   it("renders playlist cards with owner nickname after preview", async () => {
     const user = userEvent.setup();
-    const startFullImport = vi.fn().mockResolvedValue({
+    const startOrchestration = vi.fn().mockResolvedValue({
       id: "session-1",
-      status: "ready",
+      status: "ready_to_play",
       raw_track_count: 12,
       created_at: "2026-08-23T00:00:00Z",
       updated_at: "2026-08-23T00:00:01Z",
       tracks: [],
+      analytics_results: [],
+      analytics_status: "running",
+      matched_tracks: [matchedTrack()],
+      playback: {
+        temp_playlist_id: "temp-1",
+        tracks: [matchedTrack()]
+      },
+      progress: {
+        read: { current: 12, total: 12 },
+        match: { current: 1, total: 1 },
+        sync: { current: 1, total: 1 }
+      },
       source_playlists: [
         {
           id: "source-1",
@@ -36,26 +48,7 @@ describe("PlaylistImportPreview", () => {
         }
       ]
     });
-    const matchResult = {
-      import_session_id: "session-1",
-      total_track_count: 1,
-      auto_matched_count: 1,
-      needs_confirm_count: 0,
-      no_match_count: 0,
-      tracks: []
-    };
     configureImportPreviewService(mockApi({
-      getMatchJob: vi.fn().mockResolvedValue({
-        id: "job-1",
-        import_session_id: "session-1",
-        status: "ready",
-        processed_track_count: 1,
-        total_track_count: 1,
-        auto_matched_count: 1,
-        needs_confirm_count: 0,
-        no_match_count: 0,
-        result: matchResult
-      }),
       getSession: vi.fn(),
       preview: vi.fn().mockResolvedValue({
         items: [
@@ -74,17 +67,7 @@ describe("PlaylistImportPreview", () => {
         ]
       }),
       retryFullImport: vi.fn(),
-      startMatchJob: vi.fn().mockResolvedValue({
-        id: "job-1",
-        import_session_id: "session-1",
-        status: "running",
-        processed_track_count: 0,
-        total_track_count: 1,
-        auto_matched_count: 0,
-        needs_confirm_count: 0,
-        no_match_count: 0
-      }),
-      startFullImport,
+      startOrchestration,
       syncTempPlaylist: vi.fn()
     }));
 
@@ -108,12 +91,48 @@ describe("PlaylistImportPreview", () => {
     expect(screen.getByText("已读取 朋友的歌单")).toBeInTheDocument();
     expect(screen.getByText("12/12")).toBeInTheDocument();
     expect(screen.getByText("已保存 12 条原始歌曲记录。")).toBeInTheDocument();
-    expect(startFullImport).toHaveBeenCalledOnce();
+    expect(screen.getByText("已读取 12/12")).toBeInTheDocument();
+    expect(screen.getByText("已匹配 1/1")).toBeInTheDocument();
+    expect(screen.getByText("已同步 1/1")).toBeInTheDocument();
+    expect(screen.getByText("统计正在分析。")).toBeInTheDocument();
+    expect(screen.getByLabelText("网易云匹配结果")).toBeInTheDocument();
+    expect(startOrchestration).toHaveBeenCalledOnce();
+  });
 
-    await user.click(screen.getByRole("button", { name: "匹配网易云歌曲" }));
+  it("notifies the player when orchestration is ready to play", async () => {
+    const user = userEvent.setup();
+    const onReadyToPlay = vi.fn();
+    configureImportPreviewService(mockApi({
+      preview: vi.fn().mockResolvedValue({
+        items: [readyPreviewItem()]
+      }),
+      startOrchestration: vi.fn().mockResolvedValue({
+        id: "session-1",
+        status: "ready_to_play",
+        raw_track_count: 1,
+        created_at: "2026-08-23T00:00:00Z",
+        updated_at: "2026-08-23T00:00:01Z",
+        tracks: [],
+        analytics_results: [],
+        matched_tracks: [matchedTrack()],
+        ready_to_play_at: "2026-08-23T00:00:02Z",
+        playback: {
+          temp_playlist_id: "temp-1",
+          tracks: [matchedTrack()]
+        },
+        source_playlists: [readySource()]
+      })
+    }));
 
-    expect(await screen.findByLabelText("网易云匹配进度")).toBeInTheDocument();
-    expect(await screen.findByLabelText("网易云匹配结果")).toBeInTheDocument();
+    render(<PlaylistImportPreview onReadyToPlay={onReadyToPlay} />);
+    await user.type(screen.getByLabelText("歌单分享内容"), "link");
+    await user.click(screen.getByRole("button", { name: "识别歌单" }));
+    await user.click(screen.getByRole("button", { name: "确认并开始导入" }));
+
+    expect(onReadyToPlay).toHaveBeenCalledWith({
+      tempPlaylistId: "temp-1",
+      tracks: [matchedTrack()]
+    });
   });
 
   it("keeps successful cards when another card fails", async () => {
@@ -138,7 +157,8 @@ describe("PlaylistImportPreview", () => {
         ]
       }),
       retryFullImport: vi.fn(),
-      startFullImport: vi.fn()
+      startFullImport: vi.fn(),
+      startOrchestration: vi.fn()
     }));
 
     render(<PlaylistImportPreview />);
@@ -158,10 +178,56 @@ function mockApi(overrides = {}) {
     getSession: vi.fn(),
     matchTracks: vi.fn(),
     preview: vi.fn(),
+    retryAnalytics: vi.fn(),
     retryFullImport: vi.fn(),
     startMatchJob: vi.fn(),
     startFullImport: vi.fn(),
+    startOrchestration: vi.fn(),
     syncTempPlaylist: vi.fn(),
     ...overrides
+  };
+}
+
+function readyPreviewItem() {
+  return {
+    platform: "netease",
+    canonical_url: "https://music.163.com/playlist?id=123",
+    source_playlist_id: "123",
+    title: "朋友的歌单",
+    owner_source_id: "owner-1",
+    owner_nickname: "Alice",
+    track_count: 1,
+    preview_status: "ready"
+  };
+}
+
+function readySource() {
+  return {
+    ...readyPreviewItem(),
+    id: "source-1",
+    read_count: 1,
+    status: "ready"
+  };
+}
+
+function matchedTrack() {
+  return {
+    id: "track-1",
+    display_title: "共同歌曲",
+    artists: ["Artist"],
+    source_track_ids: ["netease:101"],
+    contributors: [
+      {
+        platform: "netease",
+        source_playlist_id: "123",
+        owner_source_id: "owner-1",
+        owner_nickname: "Alice"
+      }
+    ],
+    match_status: "auto_accepted",
+    netease_song_id: "101",
+    match_confidence: 1,
+    match_reason: "native_netease_song_id",
+    candidates: []
   };
 }

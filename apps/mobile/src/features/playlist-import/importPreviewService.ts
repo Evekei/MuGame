@@ -37,7 +37,18 @@ export function startFullImport(
   return api.startFullImport({
     source_playlists: items
       .filter(isReadyPreviewItem)
-      .map(toConfirmedSourcePlaylist)
+      .map((item) => toConfirmedSourcePlaylist(item))
+  });
+}
+
+export function startImportOrchestration(
+  items: PlaylistPreviewItem[],
+  options: { importTrackLimit?: number } = {}
+): Promise<ImportSessionResponse> {
+  return api.startOrchestration({
+    source_playlists: items
+      .filter(isReadyPreviewItem)
+      .map((item) => toConfirmedSourcePlaylist(item, options.importTrackLimit))
   });
 }
 
@@ -49,6 +60,12 @@ export function getImportSession(
 
 export function retryFullImport(sessionId: string): Promise<ImportSessionResponse> {
   return api.retryFullImport(sessionId);
+}
+
+export function retryImportAnalytics(
+  sessionId: string
+): Promise<ImportSessionResponse> {
+  return api.retryAnalytics(sessionId);
 }
 
 export function matchImportSession(sessionId: string): Promise<MatchTracksResponse> {
@@ -131,9 +148,10 @@ function toConfirmedSourcePlaylist(
   item: PlaylistPreviewItem & Required<Pick<
     PlaylistPreviewItem,
     "platform" | "canonical_url" | "source_playlist_id" | "title" | "owner_source_id" | "owner_nickname"
-  >>
+  >>,
+  importTrackLimit?: number
 ): ConfirmedSourcePlaylist {
-  return {
+  const playlist: ConfirmedSourcePlaylist = {
     platform: item.platform,
     canonical_url: item.canonical_url,
     source_playlist_id: item.source_playlist_id,
@@ -142,6 +160,11 @@ function toConfirmedSourcePlaylist(
     owner_nickname: item.owner_nickname,
     owner_avatar_url: item.owner_avatar_url,
     cover_url: item.cover_url,
+    source_tags: item.source_tags ?? [],
     track_count: item.track_count
   };
+  if (importTrackLimit !== undefined) {
+    playlist.import_track_limit = importTrackLimit;
+  }
+  return playlist;
 }

@@ -2,10 +2,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.api.imports import (
     get_full_import_service,
+    get_orchestration_repository,
     get_match_job_service,
     get_track_dedupe_service,
     get_track_matching_service,
 )
+from app.repositories.orchestration_repository import OrchestrationRepository
 from app.schemas.dedupe import DedupeTracksResponse
 from app.schemas.matching import (
     ManualMatchConfirmRequest,
@@ -93,6 +95,9 @@ def confirm_import_session_track_match(
     import_service: FullImportService = Depends(get_full_import_service),
     dedupe_service: TrackDedupeService = Depends(get_track_dedupe_service),
     matching_service: TrackMatchingService = Depends(get_track_matching_service),
+    orchestration_repository: OrchestrationRepository = Depends(
+        get_orchestration_repository
+    ),
 ) -> MatchedTrackItem:
     try:
         session = import_service.get_session(session_id)
@@ -102,7 +107,9 @@ def confirm_import_session_track_match(
         dedupe_service.dedupe_session(session).tracks,
         request.source_track_ids,
     )
-    return matching_service.confirm_manual_match(track, request)
+    confirmed = matching_service.confirm_manual_match(track, request)
+    orchestration_repository.replace_matched_track(session_id, confirmed)
+    return confirmed
 
 
 def find_track_for_confirmation(tracks, source_track_ids):

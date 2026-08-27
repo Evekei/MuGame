@@ -40,9 +40,17 @@ export function FullImportProgress({ session, onRetry }: FullImportProgressProps
         已保存 {session.raw_track_count} 条原始歌曲记录。
       </p>
 
-      {failedCount > 0 ? (
+      {session.progress ? (
+        <div className="orchestration-progress" aria-label="导入编排进度">
+          <p>已读取 {session.progress.read.current}/{session.progress.read.total}</p>
+          <p>已匹配 {session.progress.match.current}/{session.progress.match.total}</p>
+          <p>已同步 {session.progress.sync.current}/{session.progress.sync.total}</p>
+        </div>
+      ) : null}
+
+      {failedCount > 0 || session.status === "failed" ? (
         <button className="secondary-action" onClick={onRetry} type="button">
-          重试读取失败歌单
+          重试失败阶段
         </button>
       ) : null}
     </section>
@@ -50,6 +58,21 @@ export function FullImportProgress({ session, onRetry }: FullImportProgressProps
 }
 
 function statusLabel(status: ImportSessionResponse["status"]) {
+  if (status === "ready_to_play") {
+    return "可以播放";
+  }
+  if (status === "syncing_temp") {
+    return "同步临时歌单";
+  }
+  if (status === "matching") {
+    return "匹配中";
+  }
+  if (status === "normalizing") {
+    return "整理歌曲";
+  }
+  if (status === "importing") {
+    return "读取中";
+  }
   if (status === "ready") {
     return "已完成";
   }

@@ -60,6 +60,7 @@ public class NeteasePlayerPlugin extends Plugin {
     public void configureSourceReveal(PluginCall call) {
         if (floatingSourceWindow != null) {
             floatingSourceWindow.updateTracks(call.getArray("tracks"));
+            floatingSourceWindow.updateAnalytics(call.getObject("analytics"));
         }
         call.resolve();
     }

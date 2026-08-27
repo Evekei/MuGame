@@ -1,5 +1,5 @@
-import type { MatchedTrackItem } from "@mugame/contracts/imports";
-import type { PlayerTrack } from "@mugame/contracts/player";
+import type { ImportSessionResponse, MatchedTrackItem } from "@mugame/contracts/imports";
+import type { FloatingAnalyticsSummary, PlayerTrack } from "@mugame/contracts/player";
 import {
   getNeteasePlayerBridge,
   type NeteasePlayerBridge
@@ -15,6 +15,7 @@ export interface PlayerSessionSummary {
 }
 
 interface StartSessionOptions {
+  analytics?: FloatingAnalyticsSummary;
   tempPlaylistId?: string;
 }
 
@@ -23,6 +24,7 @@ const defaultDependencies: NeteasePlayerServiceDependencies = {
 };
 
 export class NeteasePlayerService {
+  private analytics?: FloatingAnalyticsSummary;
   private tempPlaylistId?: string;
   private playableTracks: PlayerTrack[] = [];
 
@@ -32,9 +34,7 @@ export class NeteasePlayerService {
     await this.dependencies.bridge.initialize();
     if (this.tempPlaylistId) {
       await this.dependencies.bridge.ensureLoggedIn();
-      await this.dependencies.bridge.configureSourceReveal({
-        tracks: this.playableTracks
-      });
+      await this.dependencies.bridge.configureSourceReveal(this.sourceRevealConfig());
       await this.dependencies.bridge.loadPlaylist({
         netease_playlist_id: this.tempPlaylistId
       });
@@ -46,6 +46,7 @@ export class NeteasePlayerService {
     options: StartSessionOptions = {}
   ): PlayerSessionSummary {
     const playableTracks = toPlayableTracks(tracks);
+    this.analytics = options.analytics;
     this.playableTracks = playableTracks;
     this.tempPlaylistId = options.tempPlaylistId;
     return {
@@ -56,6 +57,11 @@ export class NeteasePlayerService {
 
   async play() {
     await this.dependencies.bridge.play();
+  }
+
+  async configureAnalytics(analytics: FloatingAnalyticsSummary) {
+    this.analytics = analytics;
+    await this.dependencies.bridge.configureSourceReveal(this.sourceRevealConfig());
   }
 
   async isFloatingWindowEnabled() {
@@ -84,8 +90,19 @@ export class NeteasePlayerService {
 
   async destroy() {
     await this.dependencies.bridge.destroy();
+    this.analytics = undefined;
     this.tempPlaylistId = undefined;
     this.playableTracks = [];
+  }
+
+  private sourceRevealConfig() {
+    const config: { analytics?: FloatingAnalyticsSummary; tracks: PlayerTrack[] } = {
+      tracks: this.playableTracks
+    };
+    if (this.analytics) {
+      config.analytics = this.analytics;
+    }
+    return config;
   }
 }
 
@@ -105,6 +122,71 @@ export function toPlayableTracks(
       duration_ms: track.duration_ms,
       cover_url: track.cover_url
     }));
+}
+
+export function toFloatingAnalyticsSummary(
+  session: ImportSessionResponse | undefined
+): FloatingAnalyticsSummary {
+  if (!session) {
+    return {
+      status: "empty",
+      lines: ["统计暂无数据", "完成导入后会显示结果"]
+    };
+  }
+  const status = session.analytics_status ?? "pending";
+  const overview = metricPayload(session, "overview");
+  if (!overview) {
+    return {
+      status,
+      lines:
+        status === "failed"
+          ? ["统计分析失败", "回 MuGame 可重试"]
+          : ["统计正在分析", "稍后再点统计"]
+    };
+  }
+  const lines = [
+    "统计概览",
+    `参与 ${numberValue(overview.participant_count)} 人，共 ${numberValue(overview.raw_track_count)} 首`,
+    `去重 ${numberValue(overview.unique_track_count)} 首，共同 ${numberValue(overview.shared_track_count)} 首`
+  ];
+  const topShared = firstTitle(session, "top_shared_tracks", "tracks", "display_title");
+  if (topShared) {
+    lines.push(`共鸣歌曲：${topShared}`);
+  }
+  const topArtist = firstTitle(session, "top_artists", "artists", "artist");
+  if (topArtist) {
+    lines.push(`Top 歌手：${topArtist}`);
+  }
+  if (status === "pending" || status === "running" || status === "partial") {
+    lines.push("其余仍在分析");
+  }
+  return { status, lines };
+}
+
+function metricPayload(session: ImportSessionResponse, key: string) {
+  return session.analytics_results.find((metric) => metric.metric_key === key)?.payload;
+}
+
+function firstTitle(
+  session: ImportSessionResponse,
+  metricKey: string,
+  listKey: string,
+  titleKey: string
+) {
+  const items = metricPayload(session, metricKey)?.[listKey];
+  if (!Array.isArray(items) || !isRecord(items[0])) {
+    return "";
+  }
+  const value = items[0][titleKey];
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export const neteasePlayerService = new NeteasePlayerService();
