@@ -30,7 +30,7 @@ Production Android builds must not embed `localhost`, `127.0.0.1`, `0.0.0.0`, or
 For release builds, use an HTTPS API URL reachable by the phone:
 
 ```powershell
-$env:NEXT_PUBLIC_API_BASE_URL = "https://api.example.com"
+$env:NEXT_PUBLIC_API_BASE_URL = "https://your-railway-domain.up.railway.app"
 pnpm --dir apps/mobile build
 pnpm --dir apps/mobile exec cap sync android
 ```
@@ -123,7 +123,7 @@ $env:MUGAME_ANDROID_KEY_PASSWORD = "<key-password>"
 Build release:
 
 ```powershell
-.\scripts\build-android-release.ps1 -ApiBaseUrl "https://api.example.com"
+.\scripts\build-android-release.ps1 -ApiBaseUrl "https://your-railway-domain.up.railway.app"
 ```
 
 Release output:

@@ -17,7 +17,7 @@ Do not package `localhost`, `127.0.0.1`, or a LAN address into a release APK.
 Build the API image:
 
 ```powershell
-docker build -t mugame-api:0.1.0 services/api
+docker build -t mugame-api:0.1.0 .
 ```
 
 Run it behind an HTTPS reverse proxy or on a platform that provides HTTPS:
@@ -38,10 +38,17 @@ MUGAME_DB_PATH=/data/mugame.sqlite3
 MUGAME_CORS_ORIGINS=http://localhost,https://localhost,capacitor://localhost,ionic://localhost
 ```
 
+Railway deployment notes:
+
+- The root `Dockerfile` is the Railway entrypoint and packages only `services/api`.
+- `railway.json` sets Dockerfile build, `/health` healthcheck, and on-failure restarts.
+- Add exactly one Railway replica because this MVP uses SQLite.
+- Attach a Railway persistent volume at `/data` before production use.
+
 Verify from the phone network:
 
 ```powershell
-Invoke-RestMethod https://your-api.example.com/health
+Invoke-RestMethod https://your-railway-domain.up.railway.app/health
 ```
 
 ## Build Android Release
@@ -58,7 +65,7 @@ $env:MUGAME_ANDROID_KEY_PASSWORD = "<key-password>"
 Build:
 
 ```powershell
-.\scripts\build-android-release.ps1 -ApiBaseUrl "https://your-api.example.com"
+.\scripts\build-android-release.ps1 -ApiBaseUrl "https://your-railway-domain.up.railway.app"
 ```
 
 Output:
@@ -70,7 +77,7 @@ apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 For inspection only, an unsigned APK can be built with:
 
 ```powershell
-.\scripts\build-android-release.ps1 -ApiBaseUrl "https://your-api.example.com" -AllowUnsigned
+.\scripts\build-android-release.ps1 -ApiBaseUrl "https://your-railway-domain.up.railway.app" -AllowUnsigned
 ```
 
 ## Final Smoke Test
