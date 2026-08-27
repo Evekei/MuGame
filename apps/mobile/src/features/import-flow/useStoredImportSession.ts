@@ -7,6 +7,7 @@ import {
   useImportFlowStore
 } from "./importFlowStore";
 
+const POLL_INTERVAL_MS = 1200;
 const IMPORT_STATUSES = new Set([
   "pending",
   "reading",
@@ -26,10 +27,7 @@ export function useStoredImportSession({
   const flow = useImportFlowStore();
   const sessionId = flow.sessionId ?? flow.session?.id;
   const session = flow.session;
-  const shouldPoll =
-    Boolean(sessionId) &&
-    ((pollImport && (!session || IMPORT_STATUSES.has(session.status))) ||
-      (pollAnalytics && isAnalyticsRunning(session?.analytics_status)));
+  const shouldPoll = shouldPollSession(session, { pollAnalytics, pollImport });
 
   useEffect(() => {
     if (!sessionId) {
@@ -44,15 +42,56 @@ export function useStoredImportSession({
     if (!sessionId || !shouldPoll) {
       return;
     }
-    const timeout = window.setTimeout(() => {
-      void getImportSession(sessionId)
-        .then(setStoredImportSession)
-        .catch(() => undefined);
-    }, 1200);
-    return () => window.clearTimeout(timeout);
-  }, [sessionId, shouldPoll, session?.status, session?.analytics_status]);
+    let cancelled = false;
+    let timeout: number | undefined;
+
+    const scheduleNextPoll = () => {
+      timeout = window.setTimeout(() => {
+        void getImportSession(sessionId)
+          .then((nextSession) => {
+            setStoredImportSession(nextSession);
+            if (
+              !cancelled &&
+              shouldPollSession(nextSession, { pollAnalytics, pollImport })
+            ) {
+              scheduleNextPoll();
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              scheduleNextPoll();
+            }
+          });
+      }, POLL_INTERVAL_MS);
+    };
+
+    scheduleNextPoll();
+    return () => {
+      cancelled = true;
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [
+    pollAnalytics,
+    pollImport,
+    session?.analytics_status,
+    session?.status,
+    sessionId,
+    shouldPoll
+  ]);
 
   return flow;
+}
+
+function shouldPollSession(
+  session: { analytics_status?: unknown; status: string } | undefined,
+  options: { pollAnalytics: boolean; pollImport: boolean }
+) {
+  return (
+    (options.pollImport && (!session || IMPORT_STATUSES.has(session.status))) ||
+    (options.pollAnalytics && isAnalyticsRunning(session?.analytics_status))
+  );
 }
 
 function isAnalyticsRunning(status: unknown) {
