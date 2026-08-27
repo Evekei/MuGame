@@ -153,7 +153,7 @@ Run this on a physical Android device after installing the debug APK:
 - Device: Huawei P40 / `ANA_AN00`
 - API used for debug smoke: `http://192.168.0.102:8000`
 - Result:
-  - Login state visible as `kei_36`.
+  - Login state was visible on the test device.
   - Playlist preview recognized multiple NetEase playlists.
   - Import produced a ready temporary playlist with 135 playable tracks.
   - NetEase opened the MuGame temporary playlist and started playback.
