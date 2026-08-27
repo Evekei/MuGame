@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { AccountEntry } from "@/features/account/AccountEntry";
@@ -14,7 +15,7 @@ const steps = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname() || "/";
+  const pathname = normalizePathname(usePathname() || "/");
 
   useEffect(() => {
     hydrateThemeState();
@@ -34,14 +35,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         {steps.map((step) => {
           const isCurrent = step.paths.includes(pathname);
           return (
-            <a
+            <Link
               aria-current={isCurrent ? "page" : undefined}
               className="flow-step"
               href={step.href}
               key={step.href}
             >
               {step.label}
-            </a>
+            </Link>
           );
         })}
       </nav>
@@ -49,4 +50,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+function normalizePathname(pathname: string) {
+  const path = pathname
+    .split("?")[0]
+    .replace(/\/index\.html$/, "/")
+    .replace(/\.html$/, "")
+    .replace(/\/$/, "");
+  return path || "/";
 }

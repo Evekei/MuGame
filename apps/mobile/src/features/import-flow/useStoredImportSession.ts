@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { getImportSession } from "@/features/playlist-import/importPreviewService";
 import {
+  hydrateImportFlowState,
   setStoredImportSession,
   useImportFlowStore
 } from "./importFlowStore";
@@ -28,6 +29,10 @@ export function useStoredImportSession({
   const sessionId = flow.sessionId ?? flow.session?.id;
   const session = flow.session;
   const shouldPoll = shouldPollSession(session, { pollAnalytics, pollImport });
+
+  useEffect(() => {
+    hydrateImportFlowState();
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {

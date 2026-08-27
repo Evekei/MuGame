@@ -176,6 +176,7 @@ a {
   overflow-x: auto;
   padding: 4px 0 14px;
   scrollbar-width: none;
+  touch-action: pan-x;
   white-space: nowrap;
 }
 
@@ -197,12 +198,18 @@ a {
 }
 
 .flow-step[aria-current="page"],
+.stats-tabs button[aria-selected="true"],
 .stats-tabs button:focus-visible {
   color: var(--accent);
 }
 
-.flow-step[aria-current="page"] {
+.flow-step[aria-current="page"],
+.stats-tabs button[aria-selected="true"] {
   font-size: 18px;
+}
+
+.stats-page {
+  overflow-x: hidden;
 }
 
 .content {

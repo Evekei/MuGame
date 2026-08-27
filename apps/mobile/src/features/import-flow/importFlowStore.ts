@@ -116,9 +116,10 @@ export function setImportFlowState(
 }
 
 export function setStoredImportSession(session: ImportSessionResponse) {
+  const nextReadyPayload = readyPayloadFromSession(session);
   setImportFlowState((current) => ({
     ...current,
-    readyPayload: readyPayloadFromSession(session) ?? current.readyPayload,
+    readyPayload: stableReadyPayload(current.readyPayload, nextReadyPayload),
     session,
     sessionId: session.id,
     updatedAt: nowIso()
@@ -151,4 +152,31 @@ export function useImportFlowStore() {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stableReadyPayload(
+  current: ReadyToPlayPayload | undefined,
+  next: ReadyToPlayPayload | undefined
+) {
+  if (!next) {
+    return current;
+  }
+  if (
+    current &&
+    current.tempPlaylistId === next.tempPlaylistId &&
+    sameTrackList(current.tracks, next.tracks)
+  ) {
+    return current;
+  }
+  return next;
+}
+
+function sameTrackList(
+  current: readonly MatchedTrackItem[],
+  next: readonly MatchedTrackItem[]
+) {
+  return (
+    current.length === next.length &&
+    current.every((track, index) => track.id === next[index]?.id)
+  );
 }

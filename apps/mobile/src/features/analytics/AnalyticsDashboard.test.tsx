@@ -18,24 +18,28 @@ describe("AnalyticsDashboard", () => {
     vi.useRealTimers();
   });
 
-  it("renders completed cards and analyzing placeholders together", () => {
+  it("renders overview by default without showing every section", () => {
     render(<AnalyticsDashboard session={sessionWithMetrics(["overview"])} />);
 
     const overview = screen.getByLabelText("总览");
     expect(within(overview).getByText("2")).toBeInTheDocument();
     expect(within(overview).getByText("参与人数")).toBeInTheDocument();
-    expect(screen.getByLabelText("你们最有共鸣的歌")).toHaveTextContent("分析中");
+    expect(screen.queryByLabelText("你们最有共鸣的歌")).not.toBeInTheDocument();
   });
 
-  it("shows completed modules while analytics status is partial", () => {
-    render(<AnalyticsDashboard session={sessionWithMetrics(["overview"], "partial")} />);
+  it("shows the selected partial module state", () => {
+    render(
+      <AnalyticsDashboard
+        activeSection="albums"
+        session={sessionWithMetrics(["overview"], "partial")}
+      />
+    );
 
-    expect(screen.getByLabelText("总览")).toHaveTextContent("已完成");
     expect(screen.getByLabelText("专辑与多样性")).toHaveTextContent("分析中");
   });
 
   it("renders pairwise components without a black-box total score", () => {
-    render(<AnalyticsDashboard session={sessionWithMetrics()} />);
+    render(<AnalyticsDashboard activeSection="pairwise" session={sessionWithMetrics()} />);
 
     const pairwise = screen.getByLabelText("两两音乐品味");
     expect(within(pairwise).getByText("Alice vs Bob")).toBeInTheDocument();
@@ -47,7 +51,12 @@ describe("AnalyticsDashboard", () => {
 
   it("switches the selected pairwise owner combination", async () => {
     const user = userEvent.setup();
-    render(<AnalyticsDashboard session={sessionWithMetrics(undefined, "completed", true)} />);
+    render(
+      <AnalyticsDashboard
+        activeSection="pairwise"
+        session={sessionWithMetrics(undefined, "completed", true)}
+      />
+    );
 
     const pairwise = screen.getByLabelText("两两音乐品味");
     await user.selectOptions(within(pairwise).getByLabelText("选择组合"), "alice:cara");
@@ -58,7 +67,9 @@ describe("AnalyticsDashboard", () => {
   });
 
   it("shows a clear insufficient data message when genre coverage is low", () => {
-    render(<AnalyticsDashboard session={sessionWithLowGenreCoverage()} />);
+    render(
+      <AnalyticsDashboard activeSection="genres" session={sessionWithLowGenreCoverage()} />
+    );
 
     expect(screen.getByLabelText("Top 曲风 / 共同曲风")).toHaveTextContent(
       "曲风数据不足，结果只供参考。"
@@ -73,14 +84,18 @@ describe("AnalyticsDashboard", () => {
     });
     configureImportPreviewService(mockApi({ retryAnalytics }));
 
-    render(<AnalyticsDashboard session={sessionWithFailedSharedTracks()} />);
+    render(
+      <AnalyticsDashboard
+        activeSection="sharedTracks"
+        session={sessionWithFailedSharedTracks()}
+      />
+    );
 
-    expect(screen.getByLabelText("总览")).toHaveTextContent("已完成");
     const failedCard = screen.getByLabelText("你们最有共鸣的歌");
     await user.click(within(failedCard).getByRole("button", { name: "重试分析" }));
 
     expect(retryAnalytics).toHaveBeenCalledWith("session-1");
-    expect(screen.getByLabelText("总览")).toHaveTextContent("已完成");
+    expect(screen.getByLabelText("你们最有共鸣的歌")).toHaveTextContent("失败");
   });
 
   it("stops polling when analytics is completed", async () => {

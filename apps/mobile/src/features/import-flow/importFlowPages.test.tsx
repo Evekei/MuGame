@@ -151,6 +151,9 @@ describe("import flow pages", () => {
   it("routes MuGame to stats after playback is opened", async () => {
     const user = userEvent.setup();
     setStoredImportSession(readySession());
+    configureImportPreviewService(
+      mockApi({ getSession: vi.fn().mockResolvedValue(readySession()) })
+    );
 
     render(<PlayRoutePage />);
     await user.click(screen.getByRole("button", { name: "打开网易云播放" }));
@@ -161,9 +164,31 @@ describe("import flow pages", () => {
   it("renders stats tabs and an empty analytics state without a session", () => {
     render(<StatsPage />);
 
-    expect(screen.getByRole("button", { name: "统计总览" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "最有共鸣歌曲" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "统计总览" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "最有共鸣歌曲" })).toBeInTheDocument();
     expect(screen.getByText("临时歌单准备好后，统计结果会出现在这里。")).toBeInTheDocument();
+  });
+
+  it("switches stats sections without rendering every card at once", async () => {
+    const user = userEvent.setup();
+    setStoredImportSession(readySessionWithAnalytics());
+    configureImportPreviewService(
+      mockApi({ getSession: vi.fn().mockResolvedValue(readySessionWithAnalytics()) })
+    );
+
+    render(<StatsPage />);
+
+    expect(screen.getByLabelText("总览")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Top 歌手 / 共同歌手")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Top歌手" }));
+
+    expect(screen.getByLabelText("Top 歌手 / 共同歌手")).toBeInTheDocument();
+    expect(screen.queryByLabelText("总览")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Top歌手" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
   });
 });
 
@@ -238,6 +263,40 @@ function readySession() {
       match: { current: 1, total: 1 },
       sync: { current: 1, total: 1 }
     }
+  };
+}
+
+function readySessionWithAnalytics() {
+  return {
+    ...readySession(),
+    analytics_results: [
+      {
+        metric_key: "overview",
+        payload: {
+          participant_count: 1,
+          raw_track_count: 3,
+          shared_track_count: 0,
+          unique_track_count: 3
+        },
+        status: "completed" as const,
+        computed_at: "2026-08-27T00:00:00Z"
+      },
+      {
+        metric_key: "top_artists",
+        payload: {
+          artists: [
+            {
+              artist: "周杰伦",
+              participant_count: 1,
+              unique_track_count: 1
+            }
+          ]
+        },
+        status: "completed" as const,
+        computed_at: "2026-08-27T00:00:00Z"
+      }
+    ],
+    analytics_status: "completed" as const
   };
 }
 

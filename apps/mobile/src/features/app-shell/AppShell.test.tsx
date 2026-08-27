@@ -48,4 +48,18 @@ describe("AppShell", () => {
       "/play"
     );
   });
+
+  it("highlights static export html paths", () => {
+    pathname = "/confirm.html";
+
+    render(<AppShell>content</AppShell>);
+
+    expect(screen.getByRole("link", { name: "确认" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByRole("link", { name: "导入" })).not.toHaveAttribute(
+      "aria-current"
+    );
+  });
 });

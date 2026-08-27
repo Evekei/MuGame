@@ -25,6 +25,7 @@ const defaultDependencies: NeteasePlayerServiceDependencies = {
 
 export class NeteasePlayerService {
   private analytics?: FloatingAnalyticsSummary;
+  private initialized = false;
   private tempPlaylistId?: string;
   private playableTracks: PlayerTrack[] = [];
 
@@ -32,13 +33,8 @@ export class NeteasePlayerService {
 
   async initialize() {
     await this.dependencies.bridge.initialize();
-    if (this.tempPlaylistId) {
-      await this.dependencies.bridge.ensureLoggedIn();
-      await this.dependencies.bridge.configureSourceReveal(this.sourceRevealConfig());
-      await this.dependencies.bridge.loadPlaylist({
-        netease_playlist_id: this.tempPlaylistId
-      });
-    }
+    this.initialized = true;
+    await this.preparePlaylist();
   }
 
   startSession(
@@ -56,6 +52,11 @@ export class NeteasePlayerService {
   }
 
   async play() {
+    if (!this.initialized) {
+      await this.dependencies.bridge.initialize();
+      this.initialized = true;
+    }
+    await this.preparePlaylist();
     await this.dependencies.bridge.play();
   }
 
@@ -91,8 +92,20 @@ export class NeteasePlayerService {
   async destroy() {
     await this.dependencies.bridge.destroy();
     this.analytics = undefined;
+    this.initialized = false;
     this.tempPlaylistId = undefined;
     this.playableTracks = [];
+  }
+
+  private async preparePlaylist() {
+    if (!this.tempPlaylistId) {
+      return;
+    }
+    await this.dependencies.bridge.ensureLoggedIn();
+    await this.dependencies.bridge.configureSourceReveal(this.sourceRevealConfig());
+    await this.dependencies.bridge.loadPlaylist({
+      netease_playlist_id: this.tempPlaylistId
+    });
   }
 
   private sourceRevealConfig() {

@@ -30,6 +30,19 @@ describe("PlayerPage", () => {
     expect(onPlaybackOpened).toHaveBeenCalledOnce();
   });
 
+  it("keeps the native player session alive after NetEase playback opens", async () => {
+    const user = userEvent.setup();
+    const player = createPlayer();
+    const view = render(
+      <PlayerPage player={player} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开网易云播放" }));
+    view.unmount();
+
+    expect(player.destroy).not.toHaveBeenCalled();
+  });
+
   it("does not render app-owned playback metadata, progress, controls, or lyrics", () => {
     render(
       <PlayerPage player={createPlayer()} tempPlaylistId="temp-1" tracks={[matchedTrack()]} />

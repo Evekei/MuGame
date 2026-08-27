@@ -25,11 +25,25 @@ import {
 } from "./analyticsStats";
 
 interface AnalyticsDashboardProps {
+  activeSection?: AnalyticsSectionKey;
   onSessionChange?: (session: ImportSessionResponse) => void;
   session?: ImportSessionResponse;
 }
 
-export function AnalyticsDashboard({ onSessionChange, session }: AnalyticsDashboardProps) {
+export type AnalyticsSectionKey =
+  | "albums"
+  | "genres"
+  | "overview"
+  | "pairwise"
+  | "sharedTracks"
+  | "topArtists"
+  | "uniqueTaste";
+
+export function AnalyticsDashboard({
+  activeSection = "overview",
+  onSessionChange,
+  session
+}: AnalyticsDashboardProps) {
   const [retrying, setRetrying] = useState<string | undefined>();
   const metrics = useMemo(() => metricMap(session), [session]);
 
@@ -37,11 +51,33 @@ export function AnalyticsDashboard({ onSessionChange, session }: AnalyticsDashbo
     if (!session?.id || !shouldPollAnalytics(session.analytics_status)) {
       return;
     }
-    const timeout = window.setTimeout(async () => {
-      const nextSession = await getImportSession(session.id);
-      onSessionChange?.(nextSession);
-    }, 1500);
-    return () => window.clearTimeout(timeout);
+    let cancelled = false;
+    let timeout: number | undefined;
+    const sessionId = session.id;
+
+    const scheduleNextPoll = () => {
+      timeout = window.setTimeout(async () => {
+        try {
+          const nextSession = await getImportSession(sessionId);
+          onSessionChange?.(nextSession);
+          if (!cancelled && shouldPollAnalytics(nextSession.analytics_status)) {
+            scheduleNextPoll();
+          }
+        } catch {
+          if (!cancelled) {
+            scheduleNextPoll();
+          }
+        }
+      }, 1500);
+    };
+
+    scheduleNextPoll();
+    return () => {
+      cancelled = true;
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
   }, [onSessionChange, session?.analytics_status, session?.id]);
 
   if (!session) {
@@ -51,75 +87,130 @@ export function AnalyticsDashboard({ onSessionChange, session }: AnalyticsDashbo
       </div>
     );
   }
+  const currentSession = session;
 
   async function retryCard(cardKey: string) {
-    if (!session) {
-      return;
-    }
     setRetrying(cardKey);
     try {
-      const nextSession = await retryImportAnalytics(session.id);
+      const nextSession = await retryImportAnalytics(currentSession.id);
       onSessionChange?.(nextSession);
     } finally {
       setRetrying(undefined);
     }
   }
 
-  return (
-    <div className="analytics-dashboard">
-      <div id="stats-overview">
-        <OverviewCard
-          onRetry={() => void retryCard("overview")}
-          state={groupState(metrics, cardMetrics.overview, session.analytics_status, retrying === "overview")}
-          view={metricView(metrics, "overview", session.analytics_status)}
-        />
-      </div>
-      <div id="stats-shared-tracks">
+  return <div className="analytics-dashboard">{renderActiveSection()}</div>;
+
+  function renderActiveSection() {
+    if (activeSection === "sharedTracks") {
+      return (
         <SharedTracksCard
           onRetry={() => void retryCard("sharedTracks")}
-          state={groupState(metrics, cardMetrics.sharedTracks, session.analytics_status, retrying === "sharedTracks")}
-          view={metricView(metrics, "top_shared_tracks", session.analytics_status)}
+          state={groupState(
+            metrics,
+            cardMetrics.sharedTracks,
+            currentSession.analytics_status,
+            retrying === "sharedTracks"
+          )}
+          view={metricView(
+            metrics,
+            "top_shared_tracks",
+            currentSession.analytics_status
+          )}
         />
-      </div>
-      <div id="stats-top-artists">
+      );
+    }
+    if (activeSection === "topArtists") {
+      return (
         <TopArtistsCard
           onRetry={() => void retryCard("topArtists")}
-          state={groupState(metrics, cardMetrics.topArtists, session.analytics_status, retrying === "topArtists")}
-          view={metricView(metrics, "top_artists", session.analytics_status)}
+          state={groupState(
+            metrics,
+            cardMetrics.topArtists,
+            currentSession.analytics_status,
+            retrying === "topArtists"
+          )}
+          view={metricView(metrics, "top_artists", currentSession.analytics_status)}
         />
-      </div>
-      <div id="stats-pairwise">
+      );
+    }
+    if (activeSection === "pairwise") {
+      return (
         <PairwiseTasteCard
           metrics={metrics}
           onRetry={() => void retryCard("pairwise")}
-          session={session}
-          state={groupState(metrics, cardMetrics.pairwise, session.analytics_status, retrying === "pairwise")}
+          session={currentSession}
+          state={groupState(
+            metrics,
+            cardMetrics.pairwise,
+            currentSession.analytics_status,
+            retrying === "pairwise"
+          )}
         />
-      </div>
-      <div id="stats-genres">
+      );
+    }
+    if (activeSection === "genres") {
+      return (
         <GenresCard
           metrics={metrics}
           onRetry={() => void retryCard("genres")}
-          session={session}
-          state={groupState(metrics, cardMetrics.genres, session.analytics_status, retrying === "genres")}
+          session={currentSession}
+          state={groupState(
+            metrics,
+            cardMetrics.genres,
+            currentSession.analytics_status,
+            retrying === "genres"
+          )}
         />
-      </div>
-      <div id="stats-unique">
+      );
+    }
+    if (activeSection === "uniqueTaste") {
+      return (
         <UniqueTasteCard
           onRetry={() => void retryCard("uniqueTaste")}
-          state={groupState(metrics, cardMetrics.uniqueTaste, session.analytics_status, retrying === "uniqueTaste")}
-          view={metricView(metrics, "unique_taste_by_owner", session.analytics_status)}
+          state={groupState(
+            metrics,
+            cardMetrics.uniqueTaste,
+            currentSession.analytics_status,
+            retrying === "uniqueTaste"
+          )}
+          view={metricView(
+            metrics,
+            "unique_taste_by_owner",
+            currentSession.analytics_status
+          )}
         />
-      </div>
-      <div id="stats-albums">
-        <AlbumsDiversityCard
-          metrics={metrics}
-          onRetry={() => void retryCard("albums")}
-          session={session}
-          state={groupState(metrics, cardMetrics.albums, session.analytics_status, retrying === "albums")}
-        />
-      </div>
-      <LyricKeywordsCard metrics={metrics} />
-    </div>
-  );
+      );
+    }
+    if (activeSection === "albums") {
+      return (
+        <>
+          <AlbumsDiversityCard
+            metrics={metrics}
+            onRetry={() => void retryCard("albums")}
+            session={currentSession}
+            state={groupState(
+              metrics,
+              cardMetrics.albums,
+              currentSession.analytics_status,
+              retrying === "albums"
+            )}
+          />
+          <LyricKeywordsCard metrics={metrics} />
+        </>
+      );
+    }
+    return (
+      <OverviewCard
+        onRetry={() => void retryCard("overview")}
+        state={groupState(
+          metrics,
+          cardMetrics.overview,
+          currentSession.analytics_status,
+          retrying === "overview"
+        )}
+        view={metricView(metrics, "overview", currentSession.analytics_status)}
+      />
+    );
+  }
 }

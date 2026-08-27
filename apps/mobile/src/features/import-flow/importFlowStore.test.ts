@@ -45,6 +45,19 @@ describe("importFlowStore", () => {
       rawShareText: ""
     });
   });
+
+  it("keeps the ready payload stable when polling returns the same playback tracks", () => {
+    setStoredImportSession(readySession());
+    const firstPayload = getImportFlowState().readyPayload;
+
+    setStoredImportSession({
+      ...readySession(),
+      analytics_status: "completed" as const,
+      updated_at: "2026-08-27T00:00:02Z"
+    });
+
+    expect(getImportFlowState().readyPayload).toBe(firstPayload);
+  });
 });
 
 function resetInMemoryOnly() {

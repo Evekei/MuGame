@@ -2,7 +2,7 @@
 
 import type { ImportSessionResponse, MatchedTrackItem } from "@mugame/contracts/imports";
 import type { FloatingAnalyticsSummary } from "@mugame/contracts/player";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   neteasePlayerService,
   toFloatingAnalyticsSummary,
@@ -88,6 +88,7 @@ export function PlayerPage({
   const summary = useMemo(() => playableSummary(tracks), [tracks]);
   const [lastError, setLastError] = useState<string>();
   const [permissions, setPermissions] = useState<PermissionState>(READY_PERMISSIONS);
+  const playbackOpenedRef = useRef(false);
 
   const refreshPermissions = useCallback(async () => {
     const [floatingWindow, playlistAutoplay, playbackMonitor] = await Promise.all([
@@ -109,11 +110,15 @@ export function PlayerPage({
       .initialize()
       .then(() => (active ? refreshPermissions() : undefined))
       .catch(() => {
-        setLastError("网易云播放入口初始化失败");
+        if (active) {
+          setLastError("网易云播放入口初始化失败");
+        }
       });
     return () => {
       active = false;
-      void player.destroy();
+      if (!playbackOpenedRef.current) {
+        void player.destroy();
+      }
     };
   }, [player, refreshPermissions, tempPlaylistId, tracks]);
 
@@ -139,6 +144,7 @@ export function PlayerPage({
     setLastError(undefined);
     try {
       await player.play();
+      playbackOpenedRef.current = true;
       onPlaybackOpened?.();
     } catch (error) {
       setLastError(error instanceof Error ? error.message : "网易云播放入口打开失败");

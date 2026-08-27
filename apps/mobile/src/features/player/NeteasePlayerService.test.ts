@@ -75,6 +75,18 @@ describe("NeteasePlayerService", () => {
     expect(bridge.destroy).toHaveBeenCalledOnce();
   });
 
+  it("prepares the temp playlist again before opening playback", async () => {
+    const bridge = createBridge();
+    const service = new NeteasePlayerService({ bridge });
+
+    service.startSession([matched("1")], { tempPlaylistId: "temp-1" });
+    await service.play();
+
+    expect(bridge.initialize).toHaveBeenCalledOnce();
+    expect(bridge.loadPlaylist).toHaveBeenCalledWith({ netease_playlist_id: "temp-1" });
+    expect(bridge.play).toHaveBeenCalledOnce();
+  });
+
   it("delegates playback permission checks and settings", async () => {
     const bridge = createBridge();
     const service = new NeteasePlayerService({ bridge });
